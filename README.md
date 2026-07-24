@@ -9,6 +9,8 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 ## Why
 
+This project is grounded in first-hand experience building [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) (agr): a Rust TUI with a hand-tuned render loop — cell-level diffing, synchronized output (DEC 2026), partial line updates, microsecond frames. Having built and daily-driven that renderer, the author considers this approach fundamentally stronger than the terminal rendering of Claude Code, Codex, or pi's native TUI — all of which visibly struggle with streaming repaints, flicker, and input latency. pi-rs applies the agr rendering philosophy to a full coding agent.
+
 - Terminal rendering and input latency in a native core (cell-diff rendering, synchronized output/DEC 2026, microsecond frames)
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
 - Runtime-agnostic Host Protocol: Deno-first (permissions sandbox), Node fallback
