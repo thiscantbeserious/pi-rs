@@ -31,6 +31,12 @@ Alt-screen Rust TUI rendering from the Retained Message Model on a dedicated syn
 - Coverage floor 70% (tarpaulin), ASan runs on main pushes and `ready-to-merge` PRs, SonarCloud gate: zero new issues
 - Never commit failing gates. Never lower a gate to pass
 
+## Workflow
+
+- Implementation work lands via a feature branch + MR, reviewed before merge to `main`. Trivial docs/process commits may go directly on `main` (the rules of engagement themselves, ADRs, ROADMAP checkbox updates that track a completed phase).
+- TDD is the loop (PHILOSOPHY.md §6): RED (failing test specifying the behavior) → GREEN (minimum code to pass) → REFACTOR (under the passing test). No implementation lands without a failing test first.
+- Parity-relevant code cites the pinned Oracle (ADR 0007) with git permalinks to `earendil-works/pi@v0.82.0` line anchors (PHILOSOPHY.md §9.5). Where pi has no equivalent, say so explicitly.
+
 ## Architecture diagram rule
 
 The mermaid diagram in README.md (Target architecture) is the single visual source of truth. Any change that affects the architecture updates the diagram FIRST, in the same commit or PR as the change. Component status in the diagram tracks ROADMAP phase exits (planned until the building phase passes its gate). A stale diagram is a review-blocking defect.
