@@ -1,4 +1,4 @@
-# SOUL
+# Architectural Philosophy
 
 How this project works. Not what it builds (GOALS.md) or what was decided (docs/adr/), but the working philosophy every session and every contributor operates by. Claims here are sourced, not vibes.
 

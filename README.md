@@ -7,7 +7,7 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 **Status: planning.**
 
-- [docs/SOUL.md](./docs/SOUL.md): the working philosophy and code rules, sourced
+- [docs/PHILOSOPHY.md](./docs/PHILOSOPHY.md): the working philosophy and code rules, sourced
 - [docs/GOALS.md](./docs/GOALS.md): the three project goals, in priority order
 - [CONTEXT.md](./CONTEXT.md): the domain language
 - [docs/adr/](./docs/adr/): architectural decisions
