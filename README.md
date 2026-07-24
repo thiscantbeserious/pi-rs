@@ -5,17 +5,16 @@
 
 A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): native core for the terminal UI and agent loop, full compatibility with existing TypeScript pi extensions via a separate Extension Host process.
 
-**Status: planning.** See [docs/GOALS.md](./docs/GOALS.md) for the three project goals in priority order, [CONTEXT.md](./CONTEXT.md) for the domain language, [docs/adr/](./docs/adr/) for architectural decisions, and [docs/pitfalls.md](./docs/pitfalls.md) for field-verified rendering failures pi-rs must design and test against.
+**Status: planning.**
+
+- [docs/GOALS.md](./docs/GOALS.md) — the three project goals, in priority order
+- [CONTEXT.md](./CONTEXT.md) — the domain language
+- [docs/adr/](./docs/adr/) — architectural decisions
+- [docs/pitfalls.md](./docs/pitfalls.md) — field-verified rendering failures pi-rs must design and test against
 
 ## Why
 
-Today's agent TUIs leave rendering quality on the table, each for a different reason:
-
-- **Claude Code** (Ink/React) — redraws the full viewport on state changes; the documented flicker in multiplexers, typing lag, and exit corruption are architectural, not incidental
-- **Codex CLI** (Rust/ratatui) — still ships unstable scrollback and platform-dependent rendering; native code is necessary but not sufficient
-- **pi** (TypeScript) — does better with differential line-based rendering, but remains bounded by its JavaScript runtime and line-granular diffing
-
-[agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem:
+Today's agent TUIs leave rendering quality on the table, each for a different reason. Claude Code (Ink/React) redraws the full viewport on state changes — the documented flicker in multiplexers, typing lag, and exit corruption are architectural, not incidental. Codex CLI is Rust/ratatui and still ships unstable scrollback and platform-dependent rendering — native code is necessary but not sufficient. pi does better with differential line-based rendering, but remains bounded by its JavaScript runtime and line-granular diffing. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
 
 - Native render core: cell-diff frames, synchronized output, latency isolated from extension code
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
