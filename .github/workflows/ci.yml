@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'crates/**'
-      - 'tests/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/**'
+      - "crates/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/**"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: [main]

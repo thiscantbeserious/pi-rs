@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/pi-core",
-    "crates/pi-protocol",
-    "crates/pi-replay",
-    "crates/pi-rs",
+  "crates/pi-core",
+  "crates/pi-protocol",
+  "crates/pi-replay",
+  "crates/pi-rs",
 ]
 
 [workspace.package]
