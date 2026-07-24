@@ -23,3 +23,4 @@ Any streaming BLOCKER without a shim inside the timebox ⇒ switch to the Node h
 
 - Known open risks under Deno as of research date (2026): undici proxy dispatcher failures (denoland/deno#30899), HTTP/2 gaps (#33153, #31357), @aws-sdk credential provider hangs (aws-sdk-js-v3#4405). A compat spike running the real extension corpus under Deno must pass before the Deno host is locked in.
 - Protocol discipline required: no runtime-specific types or behaviors may leak into the Host Protocol.
+- Permissions honesty: Deno permissions are per-process, so the v1 host runs with the union of extension needs — still stronger than VS Code's extension host (no sandbox at all). Per-extension scoping is achievable post-parity via one Worker per extension (WorkerOptions.deno.permissions, verified), at the cost of worker-context compat work.

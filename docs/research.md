@@ -25,6 +25,22 @@ Working default: static compilation via per-language grammar crates with Cargo f
 
 V8's `JSON.parse` is heavily optimized; msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size — which holds. Benchmark `@msgpack/msgpack` vs `msgpackr` at protocol bring-up; codec stays behind an interface (pitfall P17).
 
+## Deno per-extension sandboxing — ADR 0002 ✅ path verified, re-timed
+
+Deno permissions are per-process, but Workers accept scoped permissions (`WorkerOptions.deno.permissions`: inherit/none/specific paths+hosts, never exceeding the parent). Per-extension sandboxing = one worker per extension — possible, but adds worker-context compat risk, so it is post-parity; the v1 host runs process-level union permissions (still stronger than VS Code, which research confirms runs all extensions unsandboxed with full system access in one process). ([WorkerOptions.deno](https://docs.deno.com/api/web/~/WorkerOptions.deno), [VS Code ext security](https://safeguard.sh/resources/blog/vscode-extension-security-development-guide))
+
+## Windows named pipes in Deno — ADR 0014 ✅ deferral validated
+
+Deno 2.7 added node:net named-pipe support ([PR #31624](https://github.com/denoland/deno/pull/31624)), but an active regression leaves clients hanging after the first disconnect ([#33366](https://github.com/denoland/deno/issues/33366)). Native Windows stays post-parity; re-check this issue when it starts.
+
+## Render thread + tokio precedent — ADR 0013 ✅ de-risked
+
+The dedicated-render-thread-fed-by-channels pattern is standard (tokio channels tutorial; Bevy's pipelined rendering uses exactly this main/render thread split). No unusual constraints found.
+
+## pi's provider model is API-type based — ADR 0005 refined
+
+pi providers are (baseUrl + `api` type + auth), where `api: "openai-completions"` is documented as "most compatible" and covers Ollama, vLLM, SGLang, OpenRouter, proxies, and local servers, with `compat` flags (supportsDeveloperRole, supportsReasoningEffort). Native Rust providers are therefore implemented per API type: openai-completions first (broadest coverage), anthropic-messages second, then openai-responses and google-generative-ai. (pi docs/models.md, docs/custom-provider.md)
+
 ## Terminal technique research — feeds docs/pitfalls.md P12–P16
 
 Synchronized-output support querying (`CSI ? 2026 $ p`), tmux buffering/leak behavior, grapheme-cluster width chaos, kitty keyboard protocol suspend edge cases, panic-restore discipline, crossterm version unification. See the pitfalls table for guards.

@@ -44,7 +44,7 @@ The ADR 0002 spike, 2-day timebox:
 ## Phase 4 — Parity march
 
 - Port pi's test suite feature-by-feature against the pinned oracle
-- Native Rust providers land one at a time, Anthropic first (ADR 0005); credentials leave the host
+- Native Rust providers land per API type (ADR 0005): openai-completions first (covers Ollama/vLLM/OpenRouter/proxies in one implementation), anthropic-messages second; credentials leave the host as each lands
 - Remaining surface: skills, prompt templates, headless mode (ADR 0018 constraint), theme completeness, session branching edge cases
 - Re-baseline the oracle pin deliberately if drift demands it
 
@@ -56,6 +56,19 @@ The ADR 0002 spike, 2-day timebox:
 - release.yml, changelog (cliff), docs — mirror agr's release machinery
 - README support matrix honored (ADR 0014); announce
 
+## Path-change triggers (pre-agreed fallbacks)
+
+Decided in advance to prevent sunk-cost stubbornness. Firing a trigger means writing the superseding ADR and taking the fallback — not relitigating.
+
+| Trigger | Fallback |
+|---|---|
+| Spike streaming BLOCKER without shim (Phase 0) | Node host (ADR 0002's own gate) |
+| Host-side msgpack codec loses the bring-up benchmark badly (P17) | Swap codec (msgpackr; JSON frames only if binary-safety is preserved another way) |
+| Alt-screen UX rejected at the Dogfood Checkpoint — selection/copy-mode/scrollback genuinely hurts daily work after a real fix attempt | Inline + diffed live region (supersede ADR 0004; retained model and pipeline survive, only the screen strategy changes) |
+| Tree-sitter grammar bundling bloats binary/build unacceptably | Zed-style WASM grammar loading (research.md) |
+| Per-extension Worker sandboxing infeasible post-parity (Node-API-in-workers compat) | Keep process-level permissions, document honestly |
+| Deno named-pipe regression (#33366) unresolved when Windows work starts | Windows transport lands on the Node host first |
+
 ## Post-parity (explicitly deferred)
 
-Native Windows (ADR 0014) · headless pi-rs as subagent child (ADR 0018) · capture-level theme overrides (ADR 0012) · declarative extension UI fast path (ADR 0003) · own session format (ADR 0008) · Zed-style WASM grammars if binary size hurts (research.md)
+Native Windows (ADR 0014) · headless pi-rs as subagent child (ADR 0018) · per-extension Worker sandboxing (ADR 0002, research.md) · capture-level theme overrides (ADR 0012) · declarative extension UI fast path (ADR 0003) · own session format (ADR 0008) · Zed-style WASM grammars if binary size hurts (research.md)

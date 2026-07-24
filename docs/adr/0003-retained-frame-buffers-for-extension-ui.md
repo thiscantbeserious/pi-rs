@@ -11,4 +11,5 @@ The Core renders with a cell-diff, synchronized-output (DEC 2026) frame loop tha
 
 - The frame loop is latency-isolated from extensions: worst case a component's region is one message stale
 - Input events stream asynchronously from Core to the owning extension
+- Input focus is Core-owned: exactly one focus owner at a time; modal extension UI (ctx.ui.select/confirm/custom) receives an explicit focus grant from the Core and returns it on close — focus routing is part of the Host Protocol, not an extension concern
 - The existing render(width)/invalidate/requestRender extension API shape is preserved

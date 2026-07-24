@@ -12,3 +12,4 @@ The repo is a Cargo workspace — pi-core (TUI, renderer, agent loop), pi-protoc
 - CI grows a Deno lane (lint, test, protocol conformance) when host/ lands
 - The msgpack wire layer (ADR 0006) is exercised by conformance tests generated from the same definitions
 - Workspace migration of the current single-crate skeleton is mechanical and should happen with the first real module
+- Within pi-core, the agent loop must not depend on the renderer: headless mode (ADR 0018) requires the loop to run with no TUI attached — enforce the boundary from the first commit, split into a separate crate if it blurs
