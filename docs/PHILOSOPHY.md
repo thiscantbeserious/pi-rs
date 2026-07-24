@@ -52,7 +52,7 @@ Claims get verified against evidence before they enter documentation, and correc
 
 This is a standing rule, not a habit:
 
-1. Whenever a document states a fact about the outside world (a tool's behavior, an API's capability, a performance characteristic, a comparison), that fact gets verified by research before it lands, and the source is linked inline where the claim is made.
+1. Whenever a document states a fact about the outside world (a tool's behavior, an API's capability, a performance characteristic, a comparison), that fact gets verified by research before it lands, and the source is linked inline where the claim is made. Citation style: numbered inline links in the form [[n]](url) at the exact claim, with a matching numbered Sources list at the bottom of the document, so every number maps one claim to one source. Code-level sources (a permalink to the implementing file) are preferred where they exist.
 2. A claim that cannot be sourced is either rewritten as an explicit assumption ("we assume X, to be verified in phase Y") or removed.
 3. When verification contradicts an existing claim, the document is corrected immediately. If the correction touches an accepted decision (an ADR, a roadmap gate, a goal), it is not silently fixed: the finding goes to the project owner, who decides between correcting in place and superseding the decision.
 4. Research findings live in docs/research.md with their sources, so the evidence trail survives the session that found it.
