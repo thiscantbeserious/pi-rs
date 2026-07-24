@@ -31,6 +31,10 @@ Alt-screen Rust TUI rendering from the Retained Message Model on a dedicated syn
 - Coverage floor 70% (tarpaulin), ASan runs on main pushes and `ready-to-merge` PRs, SonarCloud gate: zero new issues
 - Never commit failing gates. Never lower a gate to pass
 
+## Architecture diagram rule
+
+The mermaid diagram in README.md (Target architecture) is the single visual source of truth. Any change that affects the architecture updates the diagram FIRST, in the same commit or PR as the change. Component status in the diagram tracks ROADMAP phase exits (planned until the building phase passes its gate). A stale diagram is a review-blocking defect.
+
 ## Code rules (docs/PHILOSOPHY.md section 5, enforced in review)
 
 - Files ~400 lines max, functions ~20 lines max (dispatch-only routers exempt), nesting 3 levels max

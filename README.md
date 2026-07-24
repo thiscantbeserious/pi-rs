@@ -23,6 +23,49 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
 - Runtime-agnostic Host Protocol: Deno-first (permissions sandbox), Node fallback
 
+## Target architecture
+
+The single visual source of truth, reflecting ADRs 0001-0019. Status legend: everything is `planned` until the ROADMAP phase that builds it exits its gate. Update this diagram before merging work that changes the architecture.
+
+```mermaid
+flowchart TB
+    terminal["Terminal (alternate screen)"]
+
+    subgraph core["pi-rs Core - Rust binary (planned)"]
+        direction TB
+        subgraph render["Render Thread - synchronous, never awaits (ADR 0013)"]
+            rmm["Retained Message Model (ADR 0004)"]
+            pipeline["Streaming markdown pipeline: pulldown-cmark + tree-sitter (ADR 0010)"]
+            diff["Cell diff + synchronized output"]
+            input["Input + focus routing (ADR 0003)"]
+        end
+        subgraph tok["tokio runtime (ADR 0013)"]
+            agentloop["Agent loop (renderer-independent, ADR 0018)"]
+            providers["Native providers, 4 API types (ADR 0019)"]
+            tools["Built-in tools: read edit write bash grep (ADR 0015)"]
+            sessions["Session writer, sole (ADRs 0008/0016)"]
+            lifecycle["Host lifecycle: heartbeat, restart, /reload (ADRs 0009/0017)"]
+        end
+    end
+
+    subgraph host["Extension Host - Deno, Node fallback (ADR 0002, planned)"]
+        exts["pi extensions, unmodified (ADR 0001)"]
+        extui["Extension UI, pushes retained frame buffers (ADR 0003)"]
+        customprov["Host Provider Slot: extension-registered custom providers only (ADR 0019)"]
+    end
+
+    llm["LLM APIs"]
+    jsonl[("~/.pi/agent/sessions/*.jsonl - pi native format")]
+
+    diff --> terminal
+    terminal --> input
+    render <-->|"lock-free channels"| tok
+    core <-->|"Host Protocol: msgpack over UDS (ADR 0006), types codegen'd Rust to TS (ADR 0011)"| host
+    providers --> llm
+    customprov --> llm
+    sessions --> jsonl
+```
+
 ## Decisions so far
 
 - [ADR 0001](./docs/adr/0001-extension-host-process.md): Extensions run in a separate Extension Host process
