@@ -23,7 +23,7 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 - [ADR 0004](./docs/adr/0004-alternate-screen-retained-message-model.md) — Alternate screen with a retained message model
 - [ADR 0005](./docs/adr/0005-provider-trait-host-proxy-bootstrap.md) — Provider trait with host-proxy bootstrap; Rust-native majors as destination
 - [ADR 0006](./docs/adr/0006-host-protocol-msgpack-uds.md) — Host Protocol: length-prefixed MessagePack over Unix domain sockets
-- [ADR 0007](./docs/adr/0007-oracle-guided-full-parity.md) — V1 bar is full parity, oracle-guided and measured by differential replay
+- [ADR 0007](./docs/adr/0007-oracle-guided-full-parity.md) — V1 bar is full parity, oracle-guided and measured by session replay
 - [ADR 0008](./docs/adr/0008-native-pi-session-format.md) — Sessions use pi's native format, bidirectionally
 - [ADR 0009](./docs/adr/0009-hook-heartbeat-fail-closed.md) — Tool-call hooks: unbounded await, heartbeat liveness, fail-closed
 - [ADR 0010](./docs/adr/0010-streaming-markdown-pipeline.md) — Streaming markdown pipeline: pulldown-cmark structure, tree-sitter highlighting

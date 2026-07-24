@@ -1,6 +1,6 @@
 # Cargo workspace with a single-source-of-truth, codegen'd Host Protocol
 
-The repo is a Cargo workspace — pi-core (TUI, renderer, agent loop), pi-protocol (Host Protocol message types), pi-replay (differential replay harness against agr recordings) — plus host/ containing the TypeScript Extension Host in the same repo. Protocol messages are defined once in Rust (pi-protocol) and TypeScript definitions are generated from them, so schema drift between Core and host is a build failure, not a runtime surprise.
+The repo is a Cargo workspace — pi-core (TUI, renderer, agent loop), pi-protocol (Host Protocol message types), pi-replay (session replay harness over the JSONL corpus, ADR 0007) — plus host/ containing the TypeScript Extension Host in the same repo. Protocol messages are defined once in Rust (pi-protocol) and TypeScript definitions are generated from them, so schema drift between Core and host is a build failure, not a runtime surprise.
 
 ## Considered Options
 
