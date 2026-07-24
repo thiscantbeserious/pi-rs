@@ -5,9 +5,9 @@
 # Fail if coverage drops below threshold
 fail-under = 70.0
 
-# Exclusions mirror agent-session-recorder's policy:
-# - tests/*: test files themselves
+# Exclusions mirror agent-session-recorder's policy, adapted to the workspace:
+# - crates/*/tests/*: integration test files themselves
 # - */tests.rs: inline test modules
-# - src/main.rs: CLI entry point, tested via e2e
+# - crates/*/src/main.rs: CLI entry point, tested via e2e
 # TUI/terminal-bound modules will be added here as they appear (tested via e2e/snapshot).
-exclude-files = ["tests/*", "*/tests.rs", "src/main.rs"]
+exclude-files = ["crates/*/tests/*", "*/tests.rs", "crates/*/src/main.rs"]

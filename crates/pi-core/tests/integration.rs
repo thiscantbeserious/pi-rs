@@ -2,5 +2,5 @@
 
 #[test]
 fn library_links() {
-    assert_eq!(pi_rs::version(), env!("CARGO_PKG_VERSION"));
+    assert_eq!(pi_core::version(), env!("CARGO_PKG_VERSION"));
 }

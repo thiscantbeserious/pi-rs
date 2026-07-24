@@ -1,9 +1,10 @@
-//! pi-rs core library.
+//! pi-rs Core: TUI, renderer, agent loop.
 //!
-//! See CONTEXT.md for the domain language (Core, Extension Host, Host Protocol)
-//! and docs/adr/ for architectural decisions.
+//! See CONTEXT.md for the domain language and docs/adr/ for architectural
+//! decisions. The agent loop lives here but must not depend on the renderer
+//! (ADR 0011, ADR 0018 headless constraint).
 
-/// Returns the crate version.
+/// Returns the crate version (workspace package version).
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }

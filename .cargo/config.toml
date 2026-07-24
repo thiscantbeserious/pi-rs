@@ -1,0 +1,13 @@
+# Workspace-level cargo configuration.
+#
+# ts-rs export directory (ADR 0011). `relative = true` resolves against this
+# config file's location (the workspace root), so cargo sets TS_RS_EXPORT_DIR
+# to an absolute path pointing at host/protocol regardless of which crate runs
+# the export test. Generated .ts files are committed and CI freshness-checks
+# them: schema drift between Core and the Extension Host is a build failure.
+[env]
+TS_RS_EXPORT_DIR = { value = "host/protocol", relative = true }
+# u64/i64 map to TypeScript `number` (53-bit safe), not `bigint`. Protocol
+# message IDs and sequence numbers stay well under 2^53, and `number` round-trips
+# through MessagePack cleanly where `bigint` would not (ADR 0006).
+TS_RS_LARGE_INT = "number"

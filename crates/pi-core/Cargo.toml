@@ -1,0 +1,14 @@
+[package]
+name = "pi-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "pi-rs Core: TUI, renderer, agent loop"
+
+[lib]
+name = "pi_core"
+path = "src/lib.rs"
+
+[dev-dependencies]
+insta.workspace = true

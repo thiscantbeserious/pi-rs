@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/**'
+      - 'crates/**'
       - 'tests/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -32,11 +32,11 @@ jobs:
         with:
           filters: |
             src:
-              - 'src/**'
+              - 'crates/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
             code:
-              - 'src/**'
+              - 'crates/**'
               - 'tests/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: target/release/pi-rs
-          key: ${{ runner.os }}-pi-rs-${{ hashFiles('src/**', 'Cargo.toml', 'Cargo.lock') }}
+          key: ${{ runner.os }}-pi-rs-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock') }}
 
       - name: Install Rust
         if: steps.cache-binary.outputs.cache-hit != 'true'
@@ -114,7 +114,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run unit tests
-        run: cargo test --verbose
+        run: cargo test --workspace --verbose
 
   # 2b. Final check: memory safety (push to main or PRs labeled 'ready-to-merge')
   asan:
@@ -164,7 +164,7 @@ jobs:
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-Z sanitizer=address"
         run: |
-          cargo +nightly test --lib -Zbuild-std --target x86_64-unknown-linux-gnu
+          cargo +nightly test --workspace --lib -Zbuild-std --target x86_64-unknown-linux-gnu
 
   # 3. Coverage - tarpaulin -> Codecov
   coverage:
@@ -211,7 +211,7 @@ jobs:
         run: cargo install cargo-tarpaulin --version ${{ env.TARPAULIN_VERSION }}
 
       - name: Generate coverage
-        run: cargo tarpaulin --out xml --output-dir coverage --lib --test integration
+        run: cargo tarpaulin --out xml --output-dir coverage --package pi-core --lib --test integration
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
@@ -283,7 +283,7 @@ jobs:
         run: cargo install cargo-insta --version ${{ env.CARGO_INSTA_VERSION }}
 
       - name: Run snapshot tests
-        run: cargo insta test --check
+        run: cargo insta test --check --workspace
 
   # Lint - fast-fail for style issues
   lint:
@@ -301,4 +301,4 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings

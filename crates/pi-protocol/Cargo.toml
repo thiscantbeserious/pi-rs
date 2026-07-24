@@ -1,0 +1,18 @@
+[package]
+name = "pi-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "pi-rs Host Protocol: message types, single source of truth (ADR 0011)"
+
+[lib]
+name = "pi_protocol"
+path = "src/lib.rs"
+
+[dependencies]
+ts-rs = { version = "12", features = ["serde-compat"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+insta.workspace = true

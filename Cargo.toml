@@ -1,24 +1,31 @@
-[package]
-name = "pi-rs"
+[workspace]
+resolver = "2"
+members = [
+    "crates/pi-core",
+    "crates/pi-protocol",
+    "crates/pi-replay",
+    "crates/pi-rs",
+]
+
+[workspace.package]
 version = "0.1.0-dev"
 edition = "2021"
 license = "MIT"
-description = "Rust rewrite of the pi coding agent: native core, Extension Host compatibility"
 repository = "https://github.com/thiscantbeserious/pi-rs"
+authors = ["pi-rs contributors"]
 
-[[bin]]
-name = "pi-rs"
-path = "src/main.rs"
+[workspace.dependencies]
+# Crates depend on each other via the workspace table so versions stay unified.
+pi-core = { path = "crates/pi-core" }
+pi-protocol = { path = "crates/pi-protocol" }
+pi-replay = { path = "crates/pi-replay" }
 
-[lib]
-name = "pi_rs"
-path = "src/lib.rs"
-
-[dependencies]
-
-[dev-dependencies]
+# Shared dependencies, referenced by crates as `insta.workspace = true` so
+# versions stay unified across the workspace (pitfall P16 guard starts here).
 insta = "1"
 
+# Shared dev/profile settings. Release stays LTO + single codegen unit for the
+# shipped binary; crates inherit via `profile.release` at the workspace root.
 [profile.release]
 lto = true
 codegen-units = 1

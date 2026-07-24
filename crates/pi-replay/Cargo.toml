@@ -1,0 +1,11 @@
+[package]
+name = "pi-replay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "pi-rs session-corpus replay harness (ADR 0007)"
+
+[lib]
+name = "pi_replay"
+path = "src/lib.rs"
