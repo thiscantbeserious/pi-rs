@@ -16,10 +16,10 @@ Read these in order. They override anything you think you know:
 
 ## Workflow
 
-- Land implementation on a feature branch + MR. Docs/process/rules may go on `main`.
-- Write the failing test first (RED). Make it pass with minimum code (GREEN). Refactor under the passing test (REFACTOR). No implementation without a failing test first.
-- Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so.
-- Change the architecture? Update the README mermaid diagram first, same PR. Stale diagram blocks review.
+1. Land implementation on a feature branch + MR. Docs/process/rules may go on `main`.
+2. Write the failing test first (RED). Make it pass with minimum code (GREEN). Refactor under the passing test (REFACTOR). No implementation without a failing test first.
+3. Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so.
+4. Change the architecture? Update the README mermaid diagram first, same PR. Stale diagram blocks review.
 
 ## Non-negotiables
 
