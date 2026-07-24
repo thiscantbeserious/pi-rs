@@ -4,11 +4,11 @@ How this project works. Not what it builds (GOALS.md) or what was decided (docs/
 
 ## 1. Design is the work, code is an artifact
 
-Design happens in short bursts, hours at most, immediately before implementation, not months ahead [1]. Big upfront specification is waterfall in disguise: the larger a spec, the less accurate it becomes [1]. This repo's 18 ADRs do not contradict this. Each one was forced by a real dependency at its last responsible moment, the point where not deciding would have eliminated alternatives [4]. They record rationale so future readers do not re-fight settled battles [6], and every one of them is cheap to supersede (ROADMAP path-change triggers exist precisely so no decision becomes sunk cost).
+Design happens in short bursts, hours at most, immediately before implementation, not months ahead [[1]](https://holub.com/the-problem-with-design/). Big upfront specification is waterfall in disguise: the larger a spec, the less accurate it becomes [[1]](https://holub.com/the-problem-with-design/). This repo's 18 ADRs do not contradict this. Each one was forced by a real dependency at its last responsible moment, the point where not deciding would have eliminated alternatives [[4]](https://blog.codinghorror.com/the-last-responsible-moment/). They record rationale so future readers do not re-fight settled battles [[6]](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions), and every one of them is cheap to supersede (ROADMAP path-change triggers exist precisely so no decision becomes sunk cost).
 
 ## 2. Grow a working system, never assemble a designed one
 
-A complex system that works is invariably found to have evolved from a simple system that worked [2]. The ROADMAP is Gall's law operationalized: each phase exits with a smaller working system (host round-trip, renderer replaying real sessions, dogfoodable slice) that the next phase grows. Phase 1 is a walking skeleton, the thinnest end-to-end line through Core, protocol, and host, built first so integration risk surfaces before feature work [5]. We never build layers in isolation and integrate at the end.
+A complex system that works is invariably found to have evolved from a simple system that worked [[2]](https://blog.holub.com/p/galls-law). The ROADMAP is Gall's law operationalized: each phase exits with a smaller working system (host round-trip, renderer replaying real sessions, dogfoodable slice) that the next phase grows. Phase 1 is a walking skeleton, the thinnest end-to-end line through Core, protocol, and host, built first so integration risk surfaces before feature work [[5]](https://codeclimate.com/legacy/kickstart-your-next-project-with-a-walking-skeleton/). We never build layers in isolation and integrate at the end.
 
 ## 3. The architect codes
 
@@ -16,12 +16,12 @@ Architecture divorced from implementation is fantasy. Decisions in this repo are
 
 ## 4. Types are the design language
 
-The Rust discipline here is type-driven correctness: parse, don't validate. Data is validated once at a boundary and its validity is encoded in the type, so invalid states are unrepresentable downstream [3]. Applied concretely:
+The Rust discipline here is type-driven correctness: parse, don't validate. Data is validated once at a boundary and its validity is encoded in the type, so invalid states are unrepresentable downstream [[3]](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/). Applied concretely:
 
 - Protocol messages are typed once in pi-protocol and generated outward, drift is a compile error (ADR 0011)
-- State machines (host lifecycle, hook verdicts, focus ownership) use typestate-style APIs where transitions that must not happen do not compile [3]
-- Public APIs follow the Rust API Guidelines [7]
-- unsafe is justified only by FFI, a novel abstraction, or measured performance need, always with a documented invariant [8]
+- State machines (host lifecycle, hook verdicts, focus ownership) use typestate-style APIs where transitions that must not happen do not compile [[3]](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
+- Public APIs follow the Rust API Guidelines [[7]](https://rust-lang.github.io/api-guidelines/)
+- unsafe is justified only by FFI, a novel abstraction, or measured performance need, always with a documented invariant [[8]](https://microsoft.github.io/rust-guidelines/)
 
 ## 5. Code rules (carried from agent-session-recorder, proven in production)
 
@@ -36,7 +36,7 @@ The Rust discipline here is type-driven correctness: parse, don't validate. Data
 
 ## 6. Tests are usage specifications
 
-TDD here is a design strategy, not a QA afterthought: tests describe how a component is meant to be used, and stay stable across refactoring so the code underneath can change safely [1]. The parity suite (ported oracle tests plus session-corpus replay, ADR 0007) is the project-level version of the same idea: an executable specification of what "done" means.
+TDD here is a design strategy, not a QA afterthought: tests describe how a component is meant to be used, and stay stable across refactoring so the code underneath can change safely [[1]](https://holub.com/the-problem-with-design/). The parity suite (ported oracle tests plus session-corpus replay, ADR 0007) is the project-level version of the same idea: an executable specification of what "done" means.
 
 ## 7. Small iterations, one concern each
 
@@ -44,7 +44,7 @@ Each PR addresses one concern, small enough to review in one sitting. Related ch
 
 ## 8. The language is the model
 
-CONTEXT.md is a ubiquitous language in the domain-driven sense: one canonical term per concept, synonyms explicitly banned, and the code uses the same words as the documentation [9]. When a conversation and the glossary disagree, one of them is wrong and the session stops to fix it.
+CONTEXT.md is a ubiquitous language in the domain-driven sense: one canonical term per concept, synonyms explicitly banned, and the code uses the same words as the documentation [[9]](https://martinfowler.com/bliki/UbiquitousLanguage.html). When a conversation and the glossary disagree, one of them is wrong and the session stops to fix it.
 
 ## 9. Honesty over marketing
 
