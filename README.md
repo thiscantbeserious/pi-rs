@@ -9,7 +9,7 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 ## Why
 
-Today's agent TUIs leave rendering quality on the table. Claude Code and pi run on JavaScript render stacks that rewrite large screen regions as tokens stream in — the familiar flicker, restyle jank, and input lag are architectural, not incidental. Codex CLI is Rust/ratatui and still ships an awkward terminal experience — proof that the language is necessary but not sufficient; the render architecture is what matters. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
+Today's agent TUIs leave rendering quality on the table, each for a different reason. Claude Code (Ink/React) redraws the full viewport on state changes — the documented flicker in multiplexers, typing lag, and exit corruption are architectural, not incidental. Codex CLI is Rust/ratatui and still ships unstable scrollback and platform-dependent rendering — native code is necessary but not sufficient. pi does better with differential line-based rendering, but remains bounded by its JavaScript runtime and line-granular diffing. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
 
 - Native render core: cell-diff frames, synchronized output, latency isolated from extension code
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
@@ -28,3 +28,4 @@ Today's agent TUIs leave rendering quality on the table. Claude Code and pi run 
 - [ADR 0009](./docs/adr/0009-hook-heartbeat-fail-closed.md) — Tool-call hooks: unbounded await, heartbeat liveness, fail-closed
 - [ADR 0010](./docs/adr/0010-streaming-markdown-pipeline.md) — Streaming markdown pipeline: pulldown-cmark structure, tree-sitter highlighting
 - [ADR 0011](./docs/adr/0011-workspace-generated-protocol.md) — Cargo workspace with a single-source-of-truth, codegen'd Host Protocol
+- [ADR 0012](./docs/adr/0012-native-pi-themes-capture-mapping.md) — Themes use pi's native JSON format with a tree-sitter capture mapping
