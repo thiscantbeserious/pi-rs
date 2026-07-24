@@ -41,6 +41,17 @@ The dedicated-render-thread-fed-by-channels pattern is standard (tokio channels 
 
 pi providers are (baseUrl + `api` type + auth), where `api: "openai-completions"` is documented as "most compatible" and covers Ollama, vLLM, SGLang, OpenRouter, proxies, and local servers, with `compat` flags (supportsDeveloperRole, supportsReasoningEffort). Native Rust providers are therefore implemented per API type: openai-completions first (broadest coverage), anthropic-messages second, then openai-responses and google-generative-ai. (pi docs/models.md, docs/custom-provider.md)
 
+## Local first-hand verifications (author's machine, 2026-07-24)
+
+Stronger than web sources where they apply, per the sourced-facts rule:
+
+- Real pi session JSONL inspected: header entry (cwd, id, timestamp, type, version), subsequent entries carry id + parentId. Confirms ADR 0008's tree premise against actual data
+- session-format.md, models.md, providers.md, custom-provider.md all ship inside the installed npm package: the Oracle's specs are local at the pin
+- dist/*.d.ts type declarations present in the installed package: Phase 0 API-surface extraction runs against the pinned package itself
+- ~/.pi/agent/auth.json exists with an anthropic entry: the OAuth dogfood path (ADR 0019) is the author's real daily auth
+- Shared tree confirmed live: settings.json, local-models.json, models-store.json, keybindings.json, sessions/ per-directory layout (ADR 0020)
+- Corrections found: screenpipe was NOT running at check time (ROADMAP claim adjusted), Ollama not installed (now an explicit Phase 3 test dependency)
+
 ## Terminal technique research - feeds docs/pitfalls.md P12–P16
 
 Synchronized-output support querying (`CSI ? 2026 $ p`), tmux buffering/leak behavior, grapheme-cluster width chaos, kitty keyboard protocol suspend edge cases, panic-restore discipline, crossterm version unification. See the pitfalls table for guards.
