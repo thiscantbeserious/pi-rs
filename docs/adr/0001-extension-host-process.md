@@ -14,3 +14,10 @@ Existing pi extensions are arbitrary TypeScript with deep Node ecosystem depende
 - 100% extension compatibility, crash isolation, hot-reload by restarting the host
 - ctx.ui and event-interception calls cross an IPC boundary. Hot paths (per-token rendering, tool_call hooks) must be designed to avoid chatty round-trips
 - The Core's performance (rendering, diffing, agent loop) is independent of extension behavior
+
+## Sources
+
+- Porffor, experimental AOT TS/JS to WASM compiler: https://porffor.dev/
+- VS Code extension host architecture: https://code.visualstudio.com/api/advanced-topics/extension-host
+- undici proxy failures under Deno: https://github.com/denoland/deno/issues/30899
+- aws-sdk credential provider hangs under Deno: https://github.com/aws/aws-sdk-js-v3/issues/4405

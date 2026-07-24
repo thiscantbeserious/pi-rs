@@ -24,3 +24,13 @@ Any streaming BLOCKER without a shim inside the timebox ⇒ switch to the Node h
 - Known open risks under Deno as of research date (2026): undici proxy dispatcher failures ([deno#30899](https://github.com/denoland/deno/issues/30899)), HTTP/2 gaps ([#33153](https://github.com/denoland/deno/issues/33153), [#31357](https://github.com/denoland/deno/issues/31357)), @aws-sdk credential provider hangs ([aws-sdk-js-v3#4405](https://github.com/aws/aws-sdk-js-v3/issues/4405)). A compat spike running the real extension corpus under Deno must pass before the Deno host is locked in.
 - Protocol discipline required: no runtime-specific types or behaviors may leak into the Host Protocol.
 - Permissions honesty: Deno permissions are per-process, so the v1 host runs with the union of extension needs - still stronger than VS Code's extension host ([no sandbox at all](https://safeguard.sh/resources/blog/vscode-extension-security-development-guide)). Per-extension scoping is achievable post-parity via one Worker per extension ([WorkerOptions.deno.permissions](https://docs.deno.com/api/web/~/WorkerOptions.deno), verified), at the cost of worker-context compat work.
+
+## Sources
+
+- Deno security and permissions model: https://docs.deno.com/runtime/fundamentals/security/
+- deno compile: https://docs.deno.com/runtime/reference/cli/compile/
+- undici proxy dispatcher failures: https://github.com/denoland/deno/issues/30899
+- undici HTTP/2 gaps: https://github.com/denoland/deno/issues/33153 and https://github.com/denoland/deno/issues/31357
+- aws-sdk credential provider hangs: https://github.com/aws/aws-sdk-js-v3/issues/4405
+- VS Code extension host has no sandbox: https://safeguard.sh/resources/blog/vscode-extension-security-development-guide
+- Deno Worker scoped permissions: https://docs.deno.com/api/web/~/WorkerOptions.deno

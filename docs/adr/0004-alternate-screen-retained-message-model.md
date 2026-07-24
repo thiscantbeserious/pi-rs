@@ -13,3 +13,8 @@ The Core runs in the terminal's alternate screen and owns the entire grid, rende
 - Native mouse selection is eaten by mouse capture: copy-mode and yank commands (message / code block / tool output) are the primary answer. Modifier-key passthrough is terminal-dependent and must not be relied on (Shift in xterm-style terminals, [Option in iTerm2](https://iterm2.com/documentation-preferences-profiles-terminal.html), configurable in kitty)
 - History is memory-bounded, not terminal-infinite
 - On exit, nothing remains in the terminal: dump a transcript tail to the normal screen buffer
+
+## Sources
+
+- opencode TUI launches in the alternate screen: https://opencode.ai/docs/tui/
+- iTerm2 mouse reporting bypass uses Option, not Shift: https://iterm2.com/documentation-preferences-profiles-terminal.html

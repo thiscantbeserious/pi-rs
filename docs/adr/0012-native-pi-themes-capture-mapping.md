@@ -11,3 +11,8 @@ pi-rs loads pi theme files unchanged (same $schema, same directories), so existi
 
 - Highlighting granularity is capped by pi's syntax palette until an extended-keys superset (capture-level overrides, ignored by pi) is added post-parity
 - The capture mapping table is a single place to tune when highlights look wrong
+
+## Sources
+
+- tree-sitter syntax highlighting and capture names: https://tree-sitter.github.io/tree-sitter/3-syntax-highlighting.html
+- pi theme schema: https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json

@@ -12,3 +12,8 @@ The Host Protocol uses length-prefixed MessagePack frames over a Unix domain soc
 - Both sides use first-class libraries (rmp-serde in the Core, @msgpack/msgpack in the host). UDS works in both host runtimes ([Deno node:net compatibility](https://docs.deno.com/api/node/net/))
 - Protocol messages must stay runtime-neutral per ADR 0002 (no engine-specific types)
 - Windows support requires a named-pipe transport variant
+
+## Sources
+
+- LSP base protocol (JSON-RPC over stdio with headers): https://microsoft.github.io/language-server-protocol/specifications/base/0.9/specification/
+- Deno node:net Unix domain socket compatibility: https://docs.deno.com/api/node/net/

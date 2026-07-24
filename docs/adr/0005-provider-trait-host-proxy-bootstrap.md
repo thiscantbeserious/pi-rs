@@ -13,3 +13,8 @@ The Core defines a Provider trait from day one. Its first implementation is a ho
 - The Core owns the wire-format maintenance treadmill for native providers (streaming deltas, thinking blocks, cache headers, OAuth refresh)
 - Token streaming over the proxy crosses IPC. Acceptable because provider traffic is network-bound, but the Host Protocol must handle high-frequency small messages efficiently
 - Accepted bootstrap risk: while all providers are host-proxied, a dead host means no LLM and no hooks - the Core can only render and prompt for host restart (ADR 0009). Each native API type landing shrinks this window. Compat flags (supportsDeveloperRole, supportsReasoningEffort) must be honored for parity
+
+## Sources
+
+- pi provider and API-type model: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md
+- VS Code extension host process.env exposure: https://safeguard.sh/resources/blog/vscode-extension-security-development-guide

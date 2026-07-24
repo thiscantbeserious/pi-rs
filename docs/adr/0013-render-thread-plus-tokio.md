@@ -12,3 +12,8 @@ The render loop owns a dedicated OS thread running a tight synchronous loop (pol
 - The retained model needs a clear ownership story between the tokio side (writers) and render thread (reader) - channel of state deltas or snapshot swap, never shared mutable locking on the frame path
 - Panic/exit handling must restore the terminal from the render thread's owner (pitfall P3)
 - Guards pitfall P2: input handling is structurally decoupled from async load
+
+## Sources
+
+- tokio channels for cross-thread messaging: https://tokio.rs/tokio/tutorial/channels
+- Bevy pipelined rendering, main/render thread split precedent: https://github.com/bevyengine/bevy/blob/main/crates/bevy_render/src/pipelined_rendering.rs

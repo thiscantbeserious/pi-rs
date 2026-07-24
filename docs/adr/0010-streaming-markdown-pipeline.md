@@ -13,3 +13,11 @@ The streaming render path coalesces tokens to frames (≥16ms), fully reparses t
 - Grammar bundling per language: binary size, build complexity, grammar version maintenance are owned costs
 - Languages without a bundled grammar fall back to plain styling (or syntect if adopted later)
 - The retained model + tree-sitter combination leaves editor-grade features (semantic selection in history, folding) open for post-parity work
+
+## Sources
+
+- pulldown-cmark, CommonMark parser used by rustdoc and mdBook: https://github.com/pulldown-cmark/pulldown-cmark
+- tree-sitter, incremental and error-tolerant parsing: https://github.com/tree-sitter/tree-sitter
+- tree-sitter-markdown, "not recommended for correctness-critical use": https://github.com/tree-sitter-grammars/tree-sitter-markdown
+- syntect, Sublime Text syntax definitions: https://github.com/trishume/syntect
+- tree-sitter error recovery quality varies by grammar: https://github.com/tree-sitter/tree-sitter/issues/2404
