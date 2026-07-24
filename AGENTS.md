@@ -16,7 +16,7 @@ Read these in order. They override anything you think you know:
 
 ## Workflow
 
-1. Branch + MR for implementation. Docs, rules, ROADMAP checkboxes may go on `main`.
+1. Implementation goes on a feature branch + MR. Only docs, process rules, and ROADMAP checkbox updates go directly on `main`.
 2. Research the relevant decisions and unknowns. Verify against current sources, not training data.
 3. Run `/grill-with-docs` to stress-test the design against the ADRs and CONTEXT.md.
 4. Write the plan doc: steps, open decisions, research findings. Ask the user when requirements are genuinely underspecified — don't guess on a decision that's hard to reverse.
