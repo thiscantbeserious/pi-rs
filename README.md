@@ -14,3 +14,4 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 - [ADR 0001](./docs/adr/0001-extension-host-process.md) — Extensions run in a separate Extension Host process
 - [ADR 0002](./docs/adr/0002-host-protocol-deno-first.md) — Runtime-agnostic Host Protocol; Deno host first, Node as fallback
+- [ADR 0003](./docs/adr/0003-retained-frame-buffers-for-extension-ui.md) — Extension UI crosses the Host Protocol as retained frame buffers
