@@ -1,4 +1,4 @@
-# pi-rs — Agent Instructions
+# pi-rs Agent Instructions
 
 Rust rewrite of [pi](https://github.com/earendil-works/pi). Phase 1 (walking skeleton) is active.
 
@@ -8,13 +8,13 @@ Write short, clearly instructed sentences. No em dashes. No LLM slang (e.g. "loa
 
 Read these in order. They override anything you think you know:
 
-1. `docs/PHILOSOPHY.md` — code rules (§5), TDD loop (§6), sourced-facts rule (§9)
-2. `docs/GOALS.md` — streaming > concurrent-core > parity; lower number wins
-3. `CONTEXT.md` — terms; use them exactly, avoid the listed synonyms
-4. `docs/adr/` — accepted decisions; never contradict silently, propose a superseding ADR
-5. `docs/ROADMAP.md` — phases, exit gates, armed triggers; don't start a phase before its gate passes
-6. `docs/pitfalls.md` — P1-P18; new pitfall, record with evidence before fixing
-7. `docs/research.md` — tooling verdicts; a finding that changes a decision needs a superseding ADR
+1. `docs/PHILOSOPHY.md`: code rules (§5), TDD loop (§6), sourced-facts rule (§9)
+2. `docs/GOALS.md`: streaming > concurrent-core > parity; lower number wins
+3. `CONTEXT.md`: terms; use them exactly, avoid the listed synonyms
+4. `docs/adr/`: accepted decisions; never contradict silently, propose a superseding ADR
+5. `docs/ROADMAP.md`: phases, exit gates, armed triggers; don't start a phase before its gate passes
+6. `docs/pitfalls.md`: P1-P18; new pitfall, record with evidence before fixing
+7. `docs/research.md`: tooling verdicts; a finding that changes a decision needs a superseding ADR
 
 ## Workflow
 
