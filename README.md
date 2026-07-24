@@ -17,3 +17,4 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 - [ADR 0003](./docs/adr/0003-retained-frame-buffers-for-extension-ui.md) — Extension UI crosses the Host Protocol as retained frame buffers
 - [ADR 0004](./docs/adr/0004-alternate-screen-retained-message-model.md) — Alternate screen with a retained message model
 - [ADR 0005](./docs/adr/0005-provider-trait-host-proxy-bootstrap.md) — Provider trait with host-proxy bootstrap; Rust-native majors as destination
+- [ADR 0006](./docs/adr/0006-host-protocol-msgpack-uds.md) — Host Protocol: length-prefixed MessagePack over Unix domain sockets
