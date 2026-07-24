@@ -25,7 +25,7 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 
 ## Target architecture
 
-The single visual source of truth, reflecting ADRs 0001-0019. Status legend: everything is `planned` until the ROADMAP phase that builds it exits its gate. Update this diagram before merging work that changes the architecture.
+The single visual source of truth, reflecting the accepted ADRs in [docs/adr/](./docs/adr/). Status legend: everything is `planned` until the ROADMAP phase that builds it exits its gate. Update this diagram before merging work that changes the architecture.
 
 ```mermaid
 flowchart TB
