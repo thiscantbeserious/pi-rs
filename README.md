@@ -12,6 +12,7 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 - [docs/adr/](./docs/adr/) — architectural decisions
 - [docs/pitfalls.md](./docs/pitfalls.md) — field-verified rendering failures pi-rs must design and test against
 - [docs/research.md](./docs/research.md) — implementation research notes de-risking the ADRs
+- [docs/ROADMAP.md](./docs/ROADMAP.md) — dependency-ordered phases with exit gates
 
 ## Why
 
@@ -37,6 +38,10 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 - [ADR 0012](./docs/adr/0012-native-pi-themes-capture-mapping.md) — Themes use pi's native JSON format with a tree-sitter capture mapping
 - [ADR 0013](./docs/adr/0013-render-thread-plus-tokio.md) — Dedicated synchronous render thread; tokio for everything async
 - [ADR 0014](./docs/adr/0014-platform-scope-wsl-yes-windows-later.md) — V1 platforms: Linux, macOS, WSL; native Windows post-parity
+- [ADR 0015](./docs/adr/0015-builtin-tools-rust-native.md) — Built-in tools are Rust-native in the Core
+- [ADR 0016](./docs/adr/0016-core-sole-session-writer.md) — The Core is the sole session writer
+- [ADR 0017](./docs/adr/0017-reload-is-host-restart.md) — /reload restarts the Extension Host process
+- [ADR 0018](./docs/adr/0018-subagents-extension-core-aware.md) — Subagents stay an extension; the Core is designed subagent-aware
 
 ## Platform support (v1)
 
