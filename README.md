@@ -5,7 +5,7 @@
 
 A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): native core for the terminal UI and agent loop, full compatibility with existing TypeScript pi extensions via a separate Extension Host process.
 
-**Status: planning.** See [CONTEXT.md](./CONTEXT.md) for the domain language and [docs/adr/](./docs/adr/) for architectural decisions.
+**Status: planning.** See [CONTEXT.md](./CONTEXT.md) for the domain language, [docs/adr/](./docs/adr/) for architectural decisions, and [docs/pitfalls.md](./docs/pitfalls.md) for field-verified rendering failures pi-rs must design and test against.
 
 ## Why
 
