@@ -12,7 +12,7 @@ The ADR 0002 spike, 2-day timebox:
 4. Register custom-provider extensions (local-models.ts) against the stubbed API (providers are otherwise Rust-native, ADR 0019)
 5. Categorize failures shimmable vs BLOCKER. Streaming BLOCKER without shim ⇒ Node host
 
-**Exit:** ADR 0002 status updated to unconditionally accepted (Deno) or superseded (Node).
+**Exit:** ADR 0002 status updated to unconditionally accepted (Deno) or superseded (Node). The spike also produces a recommendation with evidence for the host API implementation strategy: vendor pi's MIT-licensed extension runtime with a protocol backend vs clean-room shim (decision deliberately deferred to this evidence, then recorded as an ADR). If vendoring wins, pi's MIT copyright notice ships with the vendored code.
 
 ## Phase 1 - Skeleton: workspace + protocol + host boot
 

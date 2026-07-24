@@ -17,7 +17,8 @@ accepted, supersedes the host-proxy bootstrap in ADR 0005
 - The bootstrap-brick risk documented in ADR 0005 disappears: a dead host never takes LLM streaming down, only extensions
 - Credentials never enter the Extension Host for built-in API types, from the first commit
 - First end-to-end chat requires the first native API type to land (openai-completions, testable against local Ollama without cost)
-- OAuth flows (Anthropic subscription) are Rust work from the start and must be scheduled with anthropic-messages
+- OAuth flows (Anthropic subscription) are Rust work from the start and must be scheduled with anthropic-messages in Phase 3: dogfooding on API keys would not exercise the author's real auth path
+- Auth storage interops with pi's auth.json bidirectionally during dogfood (same spirit as ADR 0008 for sessions): switching tools mid-day must not require re-login
 
 ## Sources
 

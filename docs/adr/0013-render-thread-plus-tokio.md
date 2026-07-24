@@ -9,7 +9,7 @@ The render loop owns a dedicated OS thread running a tight synchronous loop (pol
 
 ## Consequences
 
-- The retained model needs a clear ownership story between the tokio side (writers) and render thread (reader) - channel of state deltas or snapshot swap, never shared mutable locking on the frame path
+- Ownership resolved: the render thread OWNS the Retained Message Model. Tokio tasks never touch it - they send domain events (token appended, tool finished, frame buffer updated) over an mpsc channel, applied at frame start before drawing. Single-threaded mutation, no locks, no torn reads by construction. The tokio side keeps its own agent state and must never need to query display state (CQRS-like split)
 - Panic/exit handling must restore the terminal from the render thread's owner (pitfall P3)
 - Guards pitfall P2: input handling is structurally decoupled from async load
 
