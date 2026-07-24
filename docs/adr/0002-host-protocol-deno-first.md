@@ -4,7 +4,15 @@ The Host Protocol (Core ↔ Extension Host IPC contract) is designed runtime-neu
 
 ## Status
 
-accepted — gated on a compat spike
+accepted — gated on the compat spike defined below
+
+## The gate: compat spike (2-day timebox)
+
+1. All real extensions from the existing pi setup (~13, incl. subagent, token-optimizer) load and register against a stubbed pi API under Deno — pass bar: ≥90%
+2. pi-ai streams a real completion from each major provider under Deno — Anthropic (OAuth), OpenAI, Gemini, Bedrock (aws-sdk) — pass bar: zero blockers (this is the critical path per ADR 0005's host-proxy bootstrap)
+3. Every failure is categorized: shimmable (workaround inside the timebox) vs BLOCKER
+
+Any streaming BLOCKER without a shim inside the timebox ⇒ switch to the Node host, no relitigating.
 
 ## Considered Options
 
