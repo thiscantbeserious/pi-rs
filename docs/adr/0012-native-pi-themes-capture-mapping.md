@@ -4,8 +4,8 @@ pi-rs loads pi theme files unchanged (same $schema, same directories), so existi
 
 ## Considered Options
 
-- Helix/tree-sitter-native theme format — rejected for v1: richer highlighting ceiling but forces converting existing themes and diverges configs during dogfooding
-- Supporting both formats — rejected: two loaders and two mapping paths for a v1 whose bar is parity
+- Helix/tree-sitter-native theme format - rejected for v1: richer highlighting ceiling but forces converting existing themes and diverges configs during dogfooding
+- Supporting both formats - rejected: two loaders and two mapping paths for a v1 whose bar is parity
 
 ## Consequences
 

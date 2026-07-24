@@ -4,9 +4,9 @@ Only the Core writes session JSONL files. Extension calls to pi.appendEntry() ar
 
 ## Considered Options
 
-- Host writes entries directly to the shared file — rejected: two writers on one append-only file is a corruption factory and bypasses the retained model as single source of truth
+- Host writes entries directly to the shared file - rejected: two writers on one append-only file is a corruption factory and bypasses the retained model as single source of truth
 
 ## Consequences
 
-- The Host Protocol carries an append-entry message; entry ordering is the Core's responsibility
+- The Host Protocol carries an append-entry message. Entry ordering is the Core's responsibility
 - Extension-persisted state remains fully compatible (same entries, same format)

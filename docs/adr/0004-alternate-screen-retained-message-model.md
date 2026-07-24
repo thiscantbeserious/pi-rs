@@ -1,11 +1,11 @@
 # Alternate screen with a retained message model
 
-The Core runs in the terminal's alternate screen and owns the entire grid, rendering from a retained message model rather than printing history into native scrollback. Chosen for maximum rendering control and performance: perfect re-wrap on resize, live theme switching, retroactive collapse/expand of tool output, marker-based turn navigation, and semantic search over message content — none of which an inline scrollback model can support. Precedent: opencode's full-screen TUI; prior art: agent-session-recorder's viewport-over-buffer player.
+The Core runs in the terminal's alternate screen and owns the entire grid, rendering from a retained message model rather than printing history into native scrollback. Chosen for maximum rendering control and performance: perfect re-wrap on resize, live theme switching, retroactive collapse/expand of tool output, marker-based turn navigation, and semantic search over message content - none of which an inline scrollback model can support. Precedent: opencode's full-screen TUI. Prior art: agent-session-recorder's viewport-over-buffer player.
 
 ## Considered Options
 
-- Inline + diffed live region (pi/Claude Code today) — rejected: history is write-once, permanently forfeiting restyling, re-wrap, folding, and content search
-- Alt screen + scrollback sync hybrid — rejected: complex, terminal-dependent, mid-session native scrolling still broken
+- Inline + diffed live region (pi/Claude Code today) - rejected: history is write-once, permanently forfeiting restyling, re-wrap, folding, and content search
+- Alt screen + scrollback sync hybrid - rejected: complex, terminal-dependent, mid-session native scrolling still broken
 
 ## Consequences
 

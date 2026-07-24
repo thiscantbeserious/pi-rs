@@ -25,11 +25,11 @@ The Core-owned in-memory representation of the whole conversation from which eve
 _Avoid_: scrollback buffer, history cache
 
 **Render Thread**:
-The dedicated synchronous thread that owns the terminal and produces frames; it never waits on anything.
+The dedicated synchronous thread that owns the terminal and produces frames. It never waits on anything.
 _Avoid_: UI thread, main thread
 
 **Provider**:
-An implementation of the Core's LLM streaming interface — either Rust-native or the Host Proxy.
+An implementation of the Core's LLM streaming interface - either Rust-native or the Host Proxy.
 _Avoid_: backend, model adapter
 
 **Host Proxy**:
