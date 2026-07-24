@@ -10,5 +10,12 @@ description = "pi-rs Core: TUI, renderer, agent loop"
 name = "pi_core"
 path = "src/lib.rs"
 
+[dependencies]
+pi-protocol.workspace = true
+tokio = { version = "1", features = ["net", "io-util", "rt"] }
+rmp-serde = "1"
+
 [dev-dependencies]
 insta.workspace = true
+tokio = { version = "1", features = ["net", "io-util", "macros", "rt"] }
+tempfile = "3"
