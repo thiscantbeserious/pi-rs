@@ -17,9 +17,11 @@ Read these in order. They override anything you think you know:
 ## Workflow
 
 1. Branch + MR for implementation. Docs, rules, and ROADMAP checkbox updates may go on `main`.
-2. RED: write the failing test that specifies the behavior. GREEN: minimum code to pass. REFACTOR: under the passing test.
-3. Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so explicitly.
-4. Architecture change? Update the README mermaid diagram first, same PR. A stale diagram blocks review.
+2. Plan first. Write a plan doc for the work (steps, open decisions, research questions) before implementing. Ask the user when requirements are genuinely underspecified — don't guess on a load-bearing decision.
+3. RED: write the failing test that specifies the behavior. GREEN: minimum code to pass. REFACTOR: under the passing test.
+4. Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so explicitly.
+5. Architecture change? Update the README mermaid diagram first, same PR. A stale diagram blocks review.
+6. MR review checks the implementation against the plan doc. Drift between plan and implementation is either reconciled or the plan is updated — not silently ignored.
 
 ## Non-negotiables
 
