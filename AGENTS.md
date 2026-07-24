@@ -2,6 +2,8 @@
 
 Rust rewrite of [pi](https://github.com/earendil-works/pi). Phase 1 (walking skeleton) is active.
 
+Write short, clearly instructed sentences. No em dashes. No LLM slang (e.g. "load bearing"). No superficial words. Keep it simple and structured.
+
 ## Before you work
 
 Read these in order. They override anything you think you know:
@@ -19,7 +21,7 @@ Read these in order. They override anything you think you know:
 1. Implementation goes on a feature branch + MR. Only docs, process rules, and ROADMAP checkbox updates go directly on `main`.
 2. Research the relevant decisions and unknowns. Verify against current sources, not training data.
 3. Run `/grill-with-docs` to stress-test the design against the ADRs and CONTEXT.md.
-4. Write the plan doc: steps, open decisions, research findings. Ask the user when requirements are genuinely underspecified — don't guess on a decision that's hard to reverse.
+4. Write the plan doc: steps, open decisions, research findings. Ask the user when requirements are genuinely underspecified. Don't guess on a decision that's hard to reverse.
 5. RED: write the failing test that specifies the behavior. GREEN: minimum code to pass. REFACTOR: under the passing test.
 6. Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so.
 7. Architecture change? Update the README mermaid diagram first, same PR. A stale diagram blocks review.
