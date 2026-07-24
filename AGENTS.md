@@ -1,44 +1,48 @@
-# pi-rs - Agent Instructions
+# pi-rs — Agent Instructions
 
-Rust rewrite of the [pi coding agent](https://github.com/earendil-works/pi). **Status: Phase 1 (walking skeleton) active.** Next milestone, deliverables, and exit gates live in **docs/ROADMAP.md** — phases are dependency-ordered; do not start a phase before its gate passes.
+Rust rewrite of [pi](https://github.com/earendil-works/pi). Phase 1 (walking skeleton) is active.
 
-## Read first (in order)
+## Before you work
 
-1. **docs/PHILOSOPHY.md** — working philosophy: design at the last responsible moment, grow working systems, types as the design language. Carries the code rules (§5), the TDD loop (§6), and the sourced-facts rule (§9).
-2. **docs/GOALS.md** — three goals in strict priority: (1) streaming smoothness, (2) concurrent-core quality, (3) feature parity. Lower number wins conflicts.
-3. **CONTEXT.md** — canonical terms (Core, Extension Host, Host Protocol, Retained Message Model, Render Thread, Provider, Oracle, Session Corpus, Dogfood Checkpoint). Use them exactly. Avoid the listed synonyms.
-4. **docs/adr/** — all accepted decisions (superseded ones carry a status note). Never contradict an ADR silently; propose a superseding ADR instead.
-5. **docs/ROADMAP.md** — phases with objectives, deliverables, exit gates, scope fences, and armed triggers. Phase status and gate checkboxes are updated in the same PR that completes them.
-6. **docs/pitfalls.md** — P1-P18 verified failure modes with mandatory guards. New pitfall observed: record it with evidence before fixing it.
-7. **docs/research.md** — tooling verdicts and working defaults. Findings that change a decision need a superseding ADR.
+Read these in order. They override anything you think you know:
+
+1. `docs/PHILOSOPHY.md` — code rules (§5), TDD loop (§6), sourced-facts rule (§9)
+2. `docs/GOALS.md` — streaming > concurrent-core > parity; lower number wins
+3. `CONTEXT.md` — terms; use them exactly, avoid the listed synonyms
+4. `docs/adr/` — accepted decisions; never contradict silently, propose a superseding ADR
+5. `docs/ROADMAP.md` — phases, exit gates, armed triggers; don't start a phase before its gate passes
+6. `docs/pitfalls.md` — P1-P18; new pitfall, record with evidence before fixing
+7. `docs/research.md` — tooling verdicts; a finding that changes a decision needs a superseding ADR
 
 ## Workflow
 
-- Implementation work lands via a feature branch + MR, reviewed before merge to `main`. Trivial docs/process commits (these rules, ADRs, ROADMAP checkbox updates tracking a completed phase) may go directly on `main`.
-- TDD is the loop (PHILOSOPHY.md §6): RED (failing test specifying the behavior) → GREEN (minimum code to pass) → REFACTOR (under the passing test). No implementation lands without a failing test first.
-- Parity-relevant code cites the pinned Oracle via git permalinks to the pinned version (recorded in ADR 0007) with line anchors (PHILOSOPHY.md §9.5). Where pi has no equivalent, say so explicitly rather than papering over with an analogy.
-- Architecture changes update the README mermaid diagram FIRST, in the same PR as the change. Component status tracks ROADMAP phase exits. A stale diagram is a review-blocking defect.
+- Land implementation on a feature branch + MR. Docs/process/rules may go on `main`.
+- Write the failing test first (RED). Make it pass with minimum code (GREEN). Refactor under the passing test (REFACTOR). No implementation without a failing test first.
+- Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so.
+- Change the architecture? Update the README mermaid diagram first, same PR. Stale diagram blocks review.
 
-## Non-negotiable invariants (see the cited ADR, not a paraphrase)
+## Non-negotiables
 
-- Nothing blocks the render thread — no locks on the frame path, no IPC waits, no async (ADR 0013)
-- Fail closed on hook/host failure. A human prompt is the only bypass (ADR 0009)
-- Only the Core writes session files. AppendEntry routes over the protocol (ADR 0016)
-- pi-rs must not write session entries pi cannot read while interop holds (ADR 0008)
-- v1 platforms: Linux, macOS, WSL. Native Windows is post-parity (ADR 0014)
-- Parity target is a pinned pi version, recorded and re-baselined in ADR 0007
+- Render thread never waits: no locks, no IPC, no async on the frame path (ADR 0013)
+- Fail closed on hook/host failure; human prompt is the only bypass (ADR 0009)
+- Core is the sole session writer; AppendEntry routes over the protocol (ADR 0016)
+- Don't write session entries pi can't read while interop holds (ADR 0008)
+- v1: Linux, macOS, WSL. Native Windows is post-parity (ADR 0014)
+- Parity target is a pinned pi version (ADR 0007)
 
-## Commands & gates
+## Gates (never commit failing, never lower to pass)
 
-- `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` must pass (CI enforces)
-- `cargo test --workspace`, `cargo insta test --check --workspace`, `./tests/e2e_test.sh` against the release binary
-- Coverage floor 70% (tarpaulin), ASan runs on main pushes and `ready-to-merge` PRs, SonarCloud gate: zero new issues
-- Never commit failing gates. Never lower a gate to pass.
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test --workspace`
+- `cargo insta test --check --workspace`
+- `./tests/e2e_test.sh`
+- 70% coverage (tarpaulin), ASan on main + `ready-to-merge`, SonarCloud zero new issues
 
-## Layout (ADR 0011)
+## Layout (ADR 0011, ADR 0021)
 
-`crates/{pi-core, pi-protocol, pi-replay, pi-rs}` + `host/` (Deno, vendored pi runtime per ADR 0021). Protocol types are defined once in `pi-protocol`, TypeScript definitions generated via ts-rs into `host/protocol/`, committed and freshness-checked by CI so schema drift is a build failure (ADR 0011).
+`crates/{pi-core, pi-protocol, pi-replay, pi-rs}` + `host/` (Deno, vendored pi runtime). Protocol types in `pi-protocol`, generated via ts-rs into `host/protocol/`, freshness-checked by CI.
 
-## Open operational items (not in code)
+## Open items
 
-- SonarCloud project import + `SONAR_TOKEN` secret, Codecov enable + `CODECOV_TOKEN` secret (CI gates fail until then)
+- SonarCloud project import + `SONAR_TOKEN`, Codecov + `CODECOV_TOKEN` (CI gates fail until then)
