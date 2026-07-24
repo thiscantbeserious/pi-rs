@@ -1,5 +1,8 @@
 # pi-rs
 
+[![Created with pi](https://img.shields.io/badge/created%20with-pi-blueviolet)](https://github.com/badlogic/pi-mono)
+![Created with GLM5.2](https://img.shields.io/badge/created%20with-GLM5.2-00b4ab)
+
 A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): native core for the terminal UI and agent loop, full compatibility with existing TypeScript pi extensions via a separate Extension Host process.
 
 **Status: planning.** See [CONTEXT.md](./CONTEXT.md) for the domain language and [docs/adr/](./docs/adr/) for architectural decisions.
