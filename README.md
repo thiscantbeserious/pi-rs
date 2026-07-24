@@ -9,9 +9,9 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 ## Why
 
-This project is grounded in first-hand experience building [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) (agr): a Rust TUI with a hand-tuned render loop — cell-level diffing, synchronized output (DEC 2026), partial line updates, microsecond frames. Having built and daily-driven that renderer, the author considers this approach fundamentally stronger than the terminal rendering of Claude Code, Codex, or pi's native TUI — all of which visibly struggle with streaming repaints, flicker, and input latency. pi-rs applies the agr rendering philosophy to a full coding agent.
+Today's agent TUIs (Claude Code, Codex, pi) run on JavaScript render stacks that rewrite large screen regions as tokens stream in — the familiar flicker, restyle jank, and input lag are architectural, not incidental. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output (DEC 2026), and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
 
-- Terminal rendering and input latency in a native core (cell-diff rendering, synchronized output/DEC 2026, microsecond frames)
+- Native render core: cell-diff frames, synchronized output, latency isolated from extension code
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
 - Runtime-agnostic Host Protocol: Deno-first (permissions sandbox), Node fallback
 
@@ -27,3 +27,4 @@ This project is grounded in first-hand experience building [agent-session-record
 - [ADR 0008](./docs/adr/0008-native-pi-session-format.md) — Sessions use pi's native format, bidirectionally
 - [ADR 0009](./docs/adr/0009-hook-heartbeat-fail-closed.md) — Tool-call hooks: unbounded await, heartbeat liveness, fail-closed
 - [ADR 0010](./docs/adr/0010-streaming-markdown-pipeline.md) — Streaming markdown pipeline: pulldown-cmark structure, tree-sitter highlighting
+- [ADR 0011](./docs/adr/0011-workspace-generated-protocol.md) — Cargo workspace with a single-source-of-truth, codegen'd Host Protocol
