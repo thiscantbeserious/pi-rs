@@ -31,10 +31,12 @@ The single visual source of truth, reflecting the accepted ADRs in [docs/adr/](.
 flowchart TB
     terminal["Terminal (alternate screen)"]
 
+    piproto["pi-protocol crate - Host Protocol source of truth (ADR 0011)"]
+
     subgraph core["pi-rs Core - Rust binary (planned)"]
         direction TB
         subgraph render["Render Thread - synchronous, never awaits (ADR 0013)"]
-            rmm["Retained Message Model (ADR 0004)"]
+            rmm["Retained Message Model, render-thread owned (ADR 0004/0013)"]
             pipeline["Streaming markdown pipeline: pulldown-cmark + tree-sitter (ADR 0010)"]
             diff["Cell diff + synchronized output"]
             input["Input + focus routing (ADR 0003)"]
@@ -44,26 +46,42 @@ flowchart TB
             providers["Native providers, 4 API types (ADR 0019)"]
             tools["Built-in tools: read edit write bash grep (ADR 0015)"]
             sessions["Session writer, sole (ADRs 0008/0016)"]
-            lifecycle["Host lifecycle: heartbeat, restart, /reload (ADRs 0009/0017)"]
+            lifecycle["Host supervision: spawn, heartbeat, restart, /reload (ADRs 0009/0017)"]
         end
     end
 
     subgraph host["Extension Host - Deno, Node fallback (ADR 0002, planned)"]
+        runtime["pi API runtime: loader + API shim (strategy decided by Phase 0 ADR)"]
         exts["pi extensions, unmodified (ADR 0001)"]
-        extui["Extension UI, pushes retained frame buffers (ADR 0003)"]
+        extui["Extension UI, retained frame buffers (ADR 0003)"]
         customprov["Host Provider Slot: extension-registered custom providers only (ADR 0019)"]
     end
 
     llm["LLM APIs"]
-    jsonl[("~/.pi/agent/sessions/*.jsonl - pi native format")]
+    pitree[("~/.pi/agent/ shared with pi (ADR 0020): sessions, auth.json, settings.json, themes, extensions")]
+
+    piproto -->|"codegen: Rust types"| core
+    piproto -->|"codegen: TypeScript d.ts"| runtime
 
     diff --> terminal
     terminal --> input
-    render <-->|"lock-free channels"| tok
-    core <-->|"Host Protocol: msgpack over UDS (ADR 0006), types codegen'd Rust to TS (ADR 0011)"| host
+    render <-->|"lock-free channels, events in / frames out"| tok
+
+    tok <-->|"control plane: handshake, heartbeat, hook verdicts, appendEntry (msgpack over UDS, ADR 0006)"| runtime
+    tok <-->|"data plane: frame buffers, custom provider stream, input events"| runtime
+    lifecycle -->|"spawn / respawn"| host
+
+    runtime -->|"loads"| exts
+    exts --> extui
+    exts --> customprov
+
     providers --> llm
     customprov --> llm
-    sessions --> jsonl
+
+    sessions -->|"write"| pitree
+    pitree -->|"auth.json read + refresh"| providers
+    pitree -->|"themes"| render
+    pitree -->|"extensions"| runtime
 ```
 
 ## Decisions so far
