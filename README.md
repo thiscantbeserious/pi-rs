@@ -24,3 +24,4 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 - [ADR 0007](./docs/adr/0007-oracle-guided-full-parity.md) — V1 bar is full parity, oracle-guided and measured by differential replay
 - [ADR 0008](./docs/adr/0008-native-pi-session-format.md) — Sessions use pi's native format, bidirectionally
 - [ADR 0009](./docs/adr/0009-hook-heartbeat-fail-closed.md) — Tool-call hooks: unbounded await, heartbeat liveness, fail-closed
+- [ADR 0010](./docs/adr/0010-streaming-markdown-pipeline.md) — Streaming markdown pipeline: pulldown-cmark structure, tree-sitter highlighting
