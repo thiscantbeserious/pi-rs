@@ -18,14 +18,23 @@ Read these in order. They override anything you think you know:
 
 ## Workflow
 
-1. Implementation goes on a feature branch + MR. Only docs, rules, and ROADMAP checkbox updates go on `main`.
-2. Research the decisions and unknowns. Verify against current sources, not training data.
-3. Run `/grill-with-docs` to test the design against the ADRs and CONTEXT.md.
-4. Write the plan doc: steps, open decisions, research findings. Ask the user when requirements are underspecified. Do not guess on decisions that are hard to reverse.
-5. RED: write the failing test that specifies the behavior. GREEN: minimum code to pass. REFACTOR: under the passing test.
-6. Cite the pinned Oracle (ADR 0007) with a git permalink and line anchors for any behavior with a pi equivalent. If there is no pi equivalent, say so.
-7. If the architecture changes, update the README mermaid diagram first, in the same PR. A stale diagram blocks review.
-8. MR review checks the implementation against the plan doc. Reconcile drift or update the plan. Never ignore it.
+Every change follows one loop: understand, design, implement, verify.
+
+### Understand
+
+Read the ADRs, ROADMAP, and CONTEXT.md for the area. Find the unknowns. Verify anything factual against current sources, not your training data. If a requirement is unclear, ask the user. Do not guess on decisions that are hard to reverse.
+
+### Design
+
+Run `/grill-with-docs` to test the design against the ADRs and CONTEXT.md. Write a plan doc: the steps, the open decisions, the research findings. If the architecture changes, update the README mermaid diagram first, in the same PR. A stale diagram blocks review.
+
+### Implement
+
+Write the failing test first. It specifies the behavior. Make it pass with the minimum code. Refactor under the passing test. No implementation without a failing test first. For any behavior with a pi equivalent, cite the pinned Oracle (ADR 0007) with a git permalink and line anchors. If there is no pi equivalent, say so.
+
+### Land
+
+Implementation goes on a feature branch + MR. Only docs, rules, and ROADMAP checkbox updates go on `main`. MR review checks the implementation against the plan doc. Reconcile drift or update the plan. Never ignore it.
 
 ## Non-negotiables
 
