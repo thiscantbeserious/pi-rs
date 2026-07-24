@@ -1,6 +1,6 @@
 # Dedicated synchronous render thread. Tokio for everything async
 
-The render loop owns a dedicated OS thread running a tight synchronous loop (poll input ≤16ms → drain state changes → cell-diff → synchronized write) and never awaits. All async concerns - provider streams, Host Protocol traffic, heartbeats, tool subprocesses, timers - run on a tokio runtime on other threads. The sides communicate via lock-free channels feeding the retained model. The render thread consumes state non-blocking. Frame timing is immune to executor scheduling by construction, and input reading stays on the render thread for minimum keystroke latency.
+The render loop owns a dedicated OS thread running a tight synchronous loop (poll input ≤16ms → drain state changes → cell-diff → synchronized write) and never awaits. All async concerns - provider streams, Host Protocol traffic, heartbeats, tool subprocesses, timers - run on a tokio runtime on other threads. The sides communicate via [channels](https://tokio.rs/tokio/tutorial/channels) feeding the retained model. The render thread consumes state non-blocking (precedent: [Bevy's pipelined rendering](https://github.com/bevyengine/bevy/blob/main/crates/bevy_render/src/pipelined_rendering.rs) uses the same main/render thread split). Frame timing is immune to executor scheduling by construction, and input reading stays on the render thread for minimum keystroke latency.
 
 ## Considered Options
 

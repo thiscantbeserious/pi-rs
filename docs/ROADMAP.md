@@ -44,7 +44,7 @@ The ADR 0002 spike, 2-day timebox:
 ## Phase 4 - Parity march
 
 - Port pi's test suite feature-by-feature against the pinned oracle
-- Native Rust providers land per API type (ADR 0005): openai-completions first (covers Ollama/vLLM/OpenRouter/proxies in one implementation), anthropic-messages second. Credentials leave the host as each lands
+- Native Rust providers land per API type (ADR 0005): openai-completions first (covers Ollama/vLLM/OpenRouter/proxies in one implementation, per [pi's models docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md)), anthropic-messages second. Credentials leave the host as each lands
 - Remaining surface: skills, prompt templates, headless mode (ADR 0018 constraint), theme completeness, session branching edge cases
 - Re-baseline the oracle pin deliberately if drift demands it
 

@@ -1,10 +1,10 @@
 # Provider trait with host-proxy bootstrap, Rust-native majors as destination
 
-The Core defines a Provider trait from day one. Its first implementation is a host-proxy that streams through pi-ai in the Extension Host (fastest path to a working end-to-end system, 100% provider and auth compat). Native Rust implementations then land one at a time - implemented per API type, not per brand, mirroring pi's own model (`api: "openai-completions"` etc. with baseUrl + compat flags): `openai-completions` first (broadest coverage per implementation - Ollama, vLLM, OpenRouter, proxies, local servers), `anthropic-messages` second (daily driver, OAuth), then `openai-responses` and `google-generative-ai`. The proxy path remains permanently as the compatibility slot for custom/exotic TS providers.
+The Core defines a Provider trait from day one. Its first implementation is a host-proxy that streams through pi-ai in the Extension Host (fastest path to a working end-to-end system, 100% provider and auth compat). Native Rust implementations then land one at a time - implemented per API type, not per brand, mirroring [pi's own model](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md) (`api: "openai-completions"` etc. with baseUrl + compat flags): `openai-completions` first (broadest coverage per implementation - Ollama, vLLM, OpenRouter, proxies, local servers), `anthropic-messages` second (daily driver, OAuth), then `openai-responses` and `google-generative-ai`. The proxy path remains permanently as the compatibility slot for custom/exotic TS providers.
 
 ## Considered Options
 
-- All providers in the host forever - rejected: credentials would permanently live in the same process as third-party extensions (VS Code-style process.env exposure), and the Core would die with the host
+- All providers in the host forever - rejected: credentials would permanently live in the same process as third-party extensions ([VS Code-style process.env exposure](https://safeguard.sh/resources/blog/vscode-extension-security-development-guide)), and the Core would die with the host
 - All providers in Rust, no proxy - rejected: breaks pi's custom-provider TS API and blocks shipping on reimplementing every wire format and OAuth flow up front
 
 ## Consequences

@@ -1,10 +1,10 @@
 # Extensions run in a separate Extension Host process
 
-Existing pi extensions are arbitrary TypeScript with deep Node ecosystem dependencies (node:fs, node:stream, undici, @aws-sdk, zod). Compiling them to native code via WASM is not feasible (no production-grade TS→WASM compiler for arbitrary code), and embedding a JS engine in the Rust binary requires re-implementing large parts of the Node API surface. We instead run extensions unmodified in a separate JavaScript runtime process (the Extension Host) that talks to the Rust Core over IPC - the same architecture VS Code uses for its extension host.
+Existing pi extensions are arbitrary TypeScript with deep Node ecosystem dependencies (node:fs, node:stream, undici, @aws-sdk, zod). Compiling them to native code via WASM is not feasible (the only AOT TS→WASM compiler, [Porffor](https://porffor.dev/), is an explicitly experimental research project supporting a restricted JS subset), and embedding a JS engine in the Rust binary requires re-implementing large parts of the Node API surface. We instead run extensions unmodified in a separate JavaScript runtime process (the Extension Host) that talks to the Rust Core over IPC - the same architecture [VS Code uses for its extension host](https://code.visualstudio.com/api/advanced-topics/extension-host).
 
 ## Considered Options
 
-- Embed deno_core/QuickJS in the binary - rejected: months of Node-compat integration work, undici/aws-sdk edge cases
+- Embed deno_core/QuickJS in the binary - rejected: months of Node-compat integration work, undici/aws-sdk edge cases ([deno#30899](https://github.com/denoland/deno/issues/30899), [aws-sdk-js-v3#4405](https://github.com/aws/aws-sdk-js-v3/issues/4405))
 - Embed libnode - rejected: painful C++ embedding, two event loops in one process, huge binary
 - WASM-compiled extensions (QuickJS-in-wasmtime or TS→WASM AOT) - rejected: not native speed, ~70-85% compat at best, async/npm bridging pain
 - New Rust/WASM-native plugin ABI only - rejected: abandons compatibility with existing extensions

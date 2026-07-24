@@ -9,7 +9,7 @@ Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): nati
 3. **CONTEXT.md** - canonical terms (Core, Extension Host, Host Protocol, Retained Message Model, Render Thread, Provider, Host Proxy, Oracle, Session Corpus, Dogfood Checkpoint). Use them exactly. Avoid the listed synonyms.
 4. **docs/adr/** - 18 accepted decisions. Do not contradict an ADR silently. Propose a superseding ADR instead.
 5. **docs/ROADMAP.md** - phase order and exit gates.
-6. **docs/pitfalls.md** - P1-P17 verified failure modes with mandatory guards. New pitfall observed: record it with evidence before fixing.
+6. **docs/pitfalls.md** - P1-P18 verified failure modes with mandatory guards. New pitfall observed: record it with evidence before fixing.
 7. **docs/research.md** - tooling verdicts and working defaults (ts-rs, grammar bundling, codec benchmarking). Findings that change a decision need a superseding ADR.
 
 ## Architecture in one breath

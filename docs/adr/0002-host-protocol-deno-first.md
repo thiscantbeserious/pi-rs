@@ -1,6 +1,6 @@
 # Runtime-agnostic Host Protocol, Deno host first, Node as fallback
 
-The Host Protocol (Core ↔ Extension Host IPC contract) is designed runtime-neutral so any JavaScript runtime can implement an Extension Host. The first host implementation targets Deno for its permissions sandbox (`--allow-read`, `--allow-net` per extension), V8 parity with Node, and `deno compile` single-binary distribution. If Deno's Node-compat gaps prove unresolvable for our dependency graph, we switch the host to plain Node without touching the Core or the protocol.
+The Host Protocol (Core ↔ Extension Host IPC contract) is designed runtime-neutral so any JavaScript runtime can implement an Extension Host. The first host implementation targets Deno for its [permissions model](https://docs.deno.com/runtime/fundamentals/security/) (`--allow-read`, `--allow-net`), V8 parity with Node, and [`deno compile`](https://docs.deno.com/runtime/reference/cli/compile/) single-binary distribution. If Deno's Node-compat gaps prove unresolvable for our dependency graph, we switch the host to plain Node without touching the Core or the protocol.
 
 ## Status
 
@@ -21,6 +21,6 @@ Any streaming BLOCKER without a shim inside the timebox ⇒ switch to the Node h
 
 ## Consequences
 
-- Known open risks under Deno as of research date (2026): undici proxy dispatcher failures (denoland/deno#30899), HTTP/2 gaps (#33153, #31357), @aws-sdk credential provider hangs (aws-sdk-js-v3#4405). A compat spike running the real extension corpus under Deno must pass before the Deno host is locked in.
+- Known open risks under Deno as of research date (2026): undici proxy dispatcher failures ([deno#30899](https://github.com/denoland/deno/issues/30899)), HTTP/2 gaps ([#33153](https://github.com/denoland/deno/issues/33153), [#31357](https://github.com/denoland/deno/issues/31357)), @aws-sdk credential provider hangs ([aws-sdk-js-v3#4405](https://github.com/aws/aws-sdk-js-v3/issues/4405)). A compat spike running the real extension corpus under Deno must pass before the Deno host is locked in.
 - Protocol discipline required: no runtime-specific types or behaviors may leak into the Host Protocol.
-- Permissions honesty: Deno permissions are per-process, so the v1 host runs with the union of extension needs - still stronger than VS Code's extension host (no sandbox at all). Per-extension scoping is achievable post-parity via one Worker per extension (WorkerOptions.deno.permissions, verified), at the cost of worker-context compat work.
+- Permissions honesty: Deno permissions are per-process, so the v1 host runs with the union of extension needs - still stronger than VS Code's extension host ([no sandbox at all](https://safeguard.sh/resources/blog/vscode-extension-security-development-guide)). Per-extension scoping is achievable post-parity via one Worker per extension ([WorkerOptions.deno.permissions](https://docs.deno.com/api/web/~/WorkerOptions.deno), verified), at the cost of worker-context compat work.
