@@ -8,7 +8,7 @@ Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): nati
 2. **docs/GOALS.md** - three goals in strict priority: (1) streaming smoothness, (2) concurrent-core quality, (3) feature parity. Lower number wins conflicts.
 3. **CONTEXT.md** - canonical terms (Core, Extension Host, Host Protocol, Retained Message Model, Render Thread, Provider, Host Proxy, Oracle, Session Corpus, Dogfood Checkpoint). Use them exactly. Avoid the listed synonyms.
 4. **docs/adr/** - all accepted decisions (superseded ones carry a status note). Do not contradict an ADR silently. Propose a superseding ADR instead.
-5. **docs/ROADMAP.md** - phase order and exit gates.
+5. **docs/ROADMAP.md** - phases with objectives, deliverables, exit gates, scope fences, and armed triggers. Phase Status and gate checkboxes are updated in the same PR that completes them, like the architecture diagram.
 6. **docs/pitfalls.md** - P1-P18 verified failure modes with mandatory guards. New pitfall observed: record it with evidence before fixing.
 7. **docs/research.md** - tooling verdicts and working defaults (ts-rs, grammar bundling, codec benchmarking). Findings that change a decision need a superseding ADR.
 
