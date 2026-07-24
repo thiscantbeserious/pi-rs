@@ -50,6 +50,13 @@ CONTEXT.md is a ubiquitous language in the domain-driven sense: one canonical te
 
 Claims get verified against evidence before they enter documentation, and corrections are made in public (the README's Codex claim was corrected when research contradicted it, msgpack's speed claim was narrowed when benchmarks said otherwise, the Deno sandbox claim was re-scoped when permission granularity was checked). docs/research.md and docs/pitfalls.md exist so that what we learned stays sourced and testable.
 
+This is a standing rule, not a habit:
+
+1. Whenever a document states a fact about the outside world (a tool's behavior, an API's capability, a performance characteristic, a comparison), that fact gets verified by research before it lands, and the source is linked inline where the claim is made.
+2. A claim that cannot be sourced is either rewritten as an explicit assumption ("we assume X, to be verified in phase Y") or removed.
+3. When verification contradicts an existing claim, the document is corrected immediately. If the correction touches an accepted decision (an ADR, a roadmap gate, a goal), it is not silently fixed: the finding goes to the project owner, who decides between correcting in place and superseding the decision.
+4. Research findings live in docs/research.md with their sources, so the evidence trail survives the session that found it.
+
 ## Sources
 
 1. The problem with design (and how agile design actually works): https://holub.com/the-problem-with-design/

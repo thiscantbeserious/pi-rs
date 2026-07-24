@@ -39,6 +39,7 @@ Alt-screen Rust TUI rendering from the Retained Message Model on a dedicated syn
 - Document the non-obvious only (connections, side effects, constraints)
 - One concern per PR, reviewable in one sitting
 - Docs style: no em dashes, no semicolons in prose
+- Sourced facts rule (PHILOSOPHY.md section 9): every factual claim about the outside world gets web-verified before it lands and linked inline to its source. Unverifiable claims become explicit assumptions or get removed. If verification contradicts an accepted decision, escalate to the project owner instead of silently fixing
 
 ## Non-negotiables
 
