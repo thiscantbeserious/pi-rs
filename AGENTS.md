@@ -17,7 +17,7 @@ Read these in order. They override anything you think you know:
 ## Workflow
 
 1. Branch + MR for implementation. Docs, rules, and ROADMAP checkbox updates may go on `main`.
-2. Plan first: research the relevant decisions and unknowns (verify against current sources, not training data), then run `/grill-with-docs` to stress-test the design against the ADRs and CONTEXT.md, then write the plan doc (steps, open decisions, research findings). Ask the user when requirements are genuinely underspecified — don't guess on a load-bearing decision.
+2. Plan first: research the relevant decisions and unknowns (verify against current sources, not training data), then run `/grill-with-docs` to stress-test the design against the ADRs and CONTEXT.md, then write the plan doc (steps, open decisions, research findings). Ask the user when requirements are genuinely underspecified — don't guess on a decision that's hard to reverse.
 3. RED: write the failing test that specifies the behavior. GREEN: minimum code to pass. REFACTOR: under the passing test.
 4. Cite the pinned Oracle (ADR 0007) with git permalinks + line anchors for any behavior with a pi equivalent. No pi equivalent? Say so explicitly.
 5. Architecture change? Update the README mermaid diagram first, same PR. A stale diagram blocks review.
