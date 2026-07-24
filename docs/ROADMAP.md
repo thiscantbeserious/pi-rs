@@ -1,6 +1,17 @@
 # Roadmap
 
-Phases in strict dependency order. Every phase follows the same template: Status, Objective (the risk this phase retires), Deliverables (each one testable), Exit gate (measurable, checked off in the PR that passes it), Explicitly out (the scope fence), Triggers armed (which pre-agreed fallbacks can fire). A phase starts only when the previous exit gate is fully ✅. Goals priority (docs/GOALS.md) arbitrates all within-phase trade-offs. Status values: ⏳ pending, 🔨 active, ✅ done. Gate checks: ⬜ open, ✅ passed, ❌ failed (fires the armed trigger or blocks).
+Phases in strict dependency order. Every phase follows the same template: Status, Objective (the risk this phase retires), Deliverables (each one testable), Exit gate (measurable, checked off in the PR that passes it), Explicitly out (the scope fence), Triggers armed (which pre-agreed fallbacks can fire). A phase starts only when the previous exit gate is fully ✅. Goals priority (docs/GOALS.md) arbitrates all within-phase trade-offs.
+
+### Legend
+
+| Symbol | Applies to | Meaning |
+|:---:|---|---|
+| ⏳ | Phase status | Pending, not started |
+| 🔨 | Phase status | Active, work in progress |
+| ✅ | Phase status | Done, exit gate fully passed |
+| ⬜ | Gate check | Open, not yet attempted or not yet proven |
+| ✅ | Gate check | Passed, proof artifact exists |
+| ❌ | Gate check | Failed, fires the armed trigger or blocks the phase |
 
 Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbeserious/pi-rs/milestones) (M0-M5). Every issue and PR attaches to the milestone whose gate it serves.
 
