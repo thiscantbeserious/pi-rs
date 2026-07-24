@@ -1,0 +1,24 @@
+[package]
+name = "pi-rs"
+version = "0.1.0-dev"
+edition = "2021"
+license = "MIT"
+description = "Rust rewrite of the pi coding agent: native core, Extension Host compatibility"
+repository = "https://github.com/thiscantbeserious/pi-rs"
+
+[[bin]]
+name = "pi-rs"
+path = "src/main.rs"
+
+[lib]
+name = "pi_rs"
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]
+insta = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

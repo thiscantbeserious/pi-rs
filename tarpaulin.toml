@@ -1,0 +1,13 @@
+# Coverage configuration for cargo-tarpaulin
+# Run: cargo tarpaulin
+
+[default]
+# Fail if coverage drops below threshold
+fail-under = 70.0
+
+# Exclusions mirror agent-session-recorder's policy:
+# - tests/*: test files themselves
+# - */tests.rs: inline test modules
+# - src/main.rs: CLI entry point, tested via e2e
+# TUI/terminal-bound modules will be added here as they appear (tested via e2e/snapshot).
+exclude-files = ["tests/*", "*/tests.rs", "src/main.rs"]

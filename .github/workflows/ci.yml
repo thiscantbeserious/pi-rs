@@ -1,0 +1,304 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/**'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INSTA_VERSION: "1.46.1"
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'src/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+  # 1. Build - ensure it compiles and share artifacts
+  build:
+    name: Build (${{ matrix.os == 'ubuntu-latest' && 'Linux' || 'macOS' }})
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache compiled binary
+        id: cache-binary
+        uses: actions/cache@v5
+        with:
+          path: target/release/pi-rs
+          key: ${{ runner.os }}-pi-rs-${{ hashFiles('src/**', 'Cargo.toml', 'Cargo.lock') }}
+
+      - name: Install Rust
+        if: steps.cache-binary.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        if: steps.cache-binary.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        if: steps.cache-binary.outputs.cache-hit != 'true'
+        run: cargo build --release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-rs-${{ runner.os }}
+          path: target/release/pi-rs
+          retention-days: 1
+
+  # 2. Unit Tests
+  unit-tests:
+    name: Unit Tests (${{ matrix.os == 'ubuntu-latest' && 'Linux' || 'macOS' }})
+    needs: [build, detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run unit tests
+        run: cargo test --verbose
+
+  # 2b. Final check: memory safety (push to main or PRs labeled 'ready-to-merge')
+  asan:
+    name: "Final Check: Memory Leaks (ASan/LSan)"
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if final checks needed
+        id: gate
+        run: |
+          echo "should_run=${{ (github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ready-to-merge')) && needs.detect-changes.outputs.src == 'true' }}" >> $GITHUB_OUTPUT
+
+      - name: Skip
+        if: steps.gate.outputs.should_run != 'true'
+        run: echo "Skipping — no source changes or no 'ready-to-merge' label"
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.should_run == 'true'
+
+      - name: Install Rust nightly with ASan support
+        if: steps.gate.outputs.should_run == 'true'
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-linux-gnu
+          components: rust-src
+
+      - name: Get rustc version for cache key
+        if: steps.gate.outputs.should_run == 'true'
+        id: rustc
+        run: echo "version=$(rustc --version | cut -d' ' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Cache cargo registry
+        if: steps.gate.outputs.should_run == 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: asan-${{ steps.rustc.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            asan-${{ steps.rustc.outputs.version }}-
+            asan-
+
+      - name: Run tests with AddressSanitizer
+        if: steps.gate.outputs.should_run == 'true'
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test --lib -Zbuild-std --target x86_64-unknown-linux-gnu
+
+  # 3. Coverage - tarpaulin -> Codecov
+  coverage:
+    name: Coverage
+    needs: [build, detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TARPAULIN_VERSION: 0.32.7
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache build artifacts
+        uses: actions/cache@v5
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-
+
+      - name: Cache cargo-tarpaulin
+        id: cache-tarpaulin
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-tarpaulin-${{ env.TARPAULIN_VERSION }}
+
+      - name: Install cargo-tarpaulin
+        if: steps.cache-tarpaulin.outputs.cache-hit != 'true'
+        run: cargo install cargo-tarpaulin --version ${{ env.TARPAULIN_VERSION }}
+
+      - name: Generate coverage
+        run: cargo tarpaulin --out xml --output-dir coverage --lib --test integration
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/cobertura.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: true
+          version: v11.2.6
+          skip_validation: true
+
+  # 4. E2E Tests - run the built binary
+  e2e-tests:
+    name: E2E Tests (${{ matrix.os == 'ubuntu-latest' && 'Linux' || 'macOS' }})
+    needs: [build, detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pi-rs-${{ runner.os }}
+          path: target/release/
+
+      - name: Make binary executable
+        run: chmod +x target/release/pi-rs
+
+      - name: Run e2e tests
+        run: ./tests/e2e_test.sh
+
+  # 5. Snapshot Tests - insta snapshots must match committed versions
+  snapshot-tests:
+    name: Snapshot Tests
+    needs: [build, detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo-insta
+        id: cache-insta
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-insta
+          key: ${{ runner.os }}-cargo-insta-${{ env.CARGO_INSTA_VERSION }}
+
+      - name: Install cargo-insta
+        if: steps.cache-insta.outputs.cache-hit != 'true'
+        run: cargo install cargo-insta --version ${{ env.CARGO_INSTA_VERSION }}
+
+      - name: Run snapshot tests
+        run: cargo insta test --check
+
+  # Lint - fast-fail for style issues
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
