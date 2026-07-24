@@ -18,23 +18,19 @@ Read these in order. They override anything you think you know:
 
 ## Workflow
 
-Every change follows one loop: understand, design, implement, verify.
+Every change follows one loop: understand, design, implement, land.
 
-### Understand
-
-Read the ADRs, ROADMAP, and CONTEXT.md for the area. Find the unknowns. Verify anything factual against current sources, not your training data. If a requirement is unclear, ask the user. Do not guess on decisions that are hard to reverse.
-
-### Design
-
-Run `/grill-with-docs` to test the design against the ADRs and CONTEXT.md. Write a plan doc: the steps, the open decisions, the research findings. If the architecture changes, update the README mermaid diagram first, in the same PR. A stale diagram blocks review.
-
-### Implement
-
-Write the failing test first. It specifies the behavior. Make it pass with the minimum code. Refactor under the passing test. No implementation without a failing test first. For any behavior with a pi equivalent, cite the pinned Oracle (ADR 0007) with a git permalink and line anchors. If there is no pi equivalent, say so.
-
-### Land
-
-Implementation goes on a feature branch + MR. Only docs, rules, and ROADMAP checkbox updates go on `main`. MR review checks the implementation against the plan doc. Reconcile drift or update the plan. Never ignore it.
+1. Read the ADRs, ROADMAP, and CONTEXT.md for the area you are working in.
+2. Find the unknowns. Verify anything factual against current sources, not your training data.
+3. Ask the user when a requirement is unclear. Do not guess on decisions that are hard to reverse.
+4. Run `/grill-with-docs` to test the design against the ADRs and CONTEXT.md.
+5. Write a plan doc with the steps, the open decisions, and the research findings.
+6. If the architecture changes, update the README mermaid diagram first, in the same PR.
+7. Write the failing test first. It specifies the behavior.
+8. Make the test pass with the minimum code. Refactor under the passing test.
+9. For any behavior with a pi equivalent, cite the pinned Oracle (ADR 0007) with a git permalink and line anchors. If there is no pi equivalent, say so.
+10. Put implementation on a feature branch and open an MR. Only docs, rules, and ROADMAP checkbox updates go on `main`.
+11. In MR review, check the implementation against the plan doc. Reconcile drift or update the plan. Never ignore it.
 
 ## Non-negotiables
 
