@@ -11,6 +11,7 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 - [CONTEXT.md](./CONTEXT.md) — the domain language
 - [docs/adr/](./docs/adr/) — architectural decisions
 - [docs/pitfalls.md](./docs/pitfalls.md) — field-verified rendering failures pi-rs must design and test against
+- [docs/research.md](./docs/research.md) — implementation research notes de-risking the ADRs
 
 ## Why
 

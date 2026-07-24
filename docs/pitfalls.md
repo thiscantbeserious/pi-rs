@@ -28,6 +28,19 @@ Field-verified failure modes from existing agent TUIs. Each entry names the guar
 | P10 | JS runtime cost in the render path (GC pauses, event-loop scheduling between data and draw) | pi architecture (Node TUI) | No JS in the render path — extension UI arrives pre-rendered as retained buffers (ADR 0003) |
 | P11 | Streaming markdown re-render cost grows with message size | observed streaming jank in JS agent TUIs | Frame coalescing + block-granular highlight caching + incremental tree-sitter on the tail block only (ADR 0010) |
 
+## Technique pitfalls — traps inside our own chosen techniques
+
+Research-verified pitfalls in the exact mechanisms pi-rs claims as its advantages. These are the ways our own architecture can fail if implemented naively.
+
+| # | Pitfall | Evidence | Guard in pi-rs |
+|---|---------|----------|----------------|
+| P12 | Synchronized output (mode 2026) is not universal: tmux buffers with a 1s timeout, clears the mode on pane resize, and has a known leak of partial frames when BSU/ESU spans pane reads | [tmux#4744](https://github.com/tmux/tmux/pull/4744), [tmux#4983](https://github.com/tmux/tmux/issues/4983) | Query support via `CSI ? 2026 $ p` at startup; degrade gracefully (cell-diff still minimizes tearing without 2026); keep frames small and BSU/ESU pairs tight; tmux in the test matrix (extends P1) |
+| P13 | Terminals disagree wildly on character width: the same ZWJ emoji advances the cursor 2, 4, 5, or 6 cells depending on the terminal; wcwidth() is insufficient for grapheme clusters, VS16, and East-Asian-ambiguous width | [Grapheme clusters in terminals (Mitchell Hashimoto)](https://mitchellh.com/writing/grapheme-clusters-in-terminals) | Grapheme-cluster-aware width (unicode-segmentation), detect mode 2027 where available; a width-testing corpus (emoji, ZWJ, CJK, combining marks) in snapshot tests — cell-diff corruption from width drift is the failure mode |
+| P14 | Advanced keyboard protocols (kitty) have edge cases: modifier-only keypresses clearing selection, protocol state leaking into the shell after suspend (CTRL-Z) | [kitty keyboard protocol docs](https://sw.kovidgoyal.net/kitty/keyboard-protocol/), vim reports | Enable/disable protocol state on every suspend/resume path (SIGTSTP/SIGCONT), not just enter/exit |
+| P15 | Panic/exit paths that skip terminal restore leave raw mode + alt screen stuck; cursor position bugs overlap the backtrace with the shell prompt; zero-size terminals panic naive renderers | [ratatui panic-hooks recipe](https://ratatui.rs/recipes/apps/panic-hooks/) | Single owned restore path installed as a panic hook before first draw (extends P3, ADR 0013); explicit zero-size guard in the resize handler |
+| P16 | Duplicate crossterm/terminal-backend versions in one binary cause event-queue mismatches and state-restore races | [ratatui-website#876](https://github.com/ratatui/ratatui-website/issues/876) | Workspace-level dependency unification; `cargo deny` duplicate-version check in CI |
+| P17 | MessagePack decode in JS is not automatically faster than JSON.parse (V8 optimizes JSON heavily for text payloads); the msgpack win is binary-safety and payload size, not raw text decode speed | [msgpack-javascript](https://github.com/msgpack/msgpack-javascript), V8 JSON.parse benchmarks | ADR 0006 stands on binary-safety; benchmark host-side codecs (@msgpack/msgpack vs msgpackr) during protocol bring-up; keep the codec behind an interface so it is swappable without protocol changes |
+
 ## Process rule
 
 When a new pitfall is observed in the wild (any agent TUI, incl. pi-rs itself), add it here with evidence and a named guard **before** fixing it.
