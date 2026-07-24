@@ -8,6 +8,10 @@ Extensions intercept tool calls across the Host Protocol (pi's event interceptio
 - Bounded per-hook timeout - rejected: structurally incompatible with user-interactive hooks. Would force re-authoring existing extensions
 - Declared hook classes (fast/interactive) - rejected for now: existing extensions declare nothing, so the required default collapses to this ADR's behavior. May return as an opt-in protocol extension
 
+## In-flight tool executions
+
+Hook verdicts fail closed, but a tool already executing in the host when the host dies resolves differently: the orphaned call returns a structured error result ("extension host terminated during execution") to the LLM, which can react, retry, or adapt - matching how tool failures already flow. The native restart prompt appears in parallel. The turn continues, the session stays intact, and re-execution is never automatic (the dead tool may have had side effects).
+
 ## Consequences
 
 - The Host Protocol carries heartbeats independent of request/response traffic
