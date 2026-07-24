@@ -29,3 +29,4 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 - [ADR 0010](./docs/adr/0010-streaming-markdown-pipeline.md) — Streaming markdown pipeline: pulldown-cmark structure, tree-sitter highlighting
 - [ADR 0011](./docs/adr/0011-workspace-generated-protocol.md) — Cargo workspace with a single-source-of-truth, codegen'd Host Protocol
 - [ADR 0012](./docs/adr/0012-native-pi-themes-capture-mapping.md) — Themes use pi's native JSON format with a tree-sitter capture mapping
+- [ADR 0013](./docs/adr/0013-render-thread-plus-tokio.md) — Dedicated synchronous render thread; tokio for everything async
