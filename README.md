@@ -9,7 +9,7 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 ## Why
 
-Today's agent TUIs (Claude Code, Codex, pi) run on JavaScript render stacks that rewrite large screen regions as tokens stream in — the familiar flicker, restyle jank, and input lag are architectural, not incidental. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output (DEC 2026), and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
+Today's agent TUIs (Claude Code, Codex, pi) run on JavaScript render stacks that rewrite large screen regions as tokens stream in — the familiar flicker, restyle jank, and input lag are architectural, not incidental. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
 
 - Native render core: cell-diff frames, synchronized output, latency isolated from extension code
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
