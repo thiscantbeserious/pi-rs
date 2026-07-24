@@ -87,6 +87,7 @@ flowchart TB
 - [ADR 0017](./docs/adr/0017-reload-is-host-restart.md): /reload restarts the Extension Host process
 - [ADR 0018](./docs/adr/0018-subagents-extension-core-aware.md): Subagents stay an extension. The Core is designed subagent-aware
 - [ADR 0019](./docs/adr/0019-providers-rust-native-day-one.md): Providers are Rust-native from day one, the host is strictly extensions-only (supersedes the ADR 0005 bootstrap)
+- [ADR 0020](./docs/adr/0020-pi-rs-binary-shared-pi-tree.md): pi-rs binary name, fully shared ~/.pi config tree
 
 ## Platform support (v1)
 

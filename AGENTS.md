@@ -7,7 +7,7 @@ Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): nati
 1. **docs/PHILOSOPHY.md** - the working philosophy, sourced: design in short bursts at the last responsible moment, grow working systems, types as the design language, tests as usage specifications, honesty over marketing. Carries the concrete code rules.
 2. **docs/GOALS.md** - three goals in strict priority: (1) streaming smoothness, (2) concurrent-core quality, (3) feature parity. Lower number wins conflicts.
 3. **CONTEXT.md** - canonical terms (Core, Extension Host, Host Protocol, Retained Message Model, Render Thread, Provider, Host Proxy, Oracle, Session Corpus, Dogfood Checkpoint). Use them exactly. Avoid the listed synonyms.
-4. **docs/adr/** - 19 decisions (0005 partially superseded by 0019). Do not contradict an ADR silently. Propose a superseding ADR instead.
+4. **docs/adr/** - 20 decisions (0005 partially superseded by 0019). Do not contradict an ADR silently. Propose a superseding ADR instead.
 5. **docs/ROADMAP.md** - phase order and exit gates.
 6. **docs/pitfalls.md** - P1-P18 verified failure modes with mandatory guards. New pitfall observed: record it with evidence before fixing.
 7. **docs/research.md** - tooling verdicts and working defaults (ts-rs, grammar bundling, codec benchmarking). Findings that change a decision need a superseding ADR.
