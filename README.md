@@ -29,7 +29,7 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 - [ADR 0002](./docs/adr/0002-host-protocol-deno-first.md): Runtime-agnostic Host Protocol, Deno host first, Node as fallback
 - [ADR 0003](./docs/adr/0003-retained-frame-buffers-for-extension-ui.md): Extension UI crosses the Host Protocol as retained frame buffers
 - [ADR 0004](./docs/adr/0004-alternate-screen-retained-message-model.md): Alternate screen with a retained message model
-- [ADR 0005](./docs/adr/0005-provider-trait-host-proxy-bootstrap.md): Provider trait with host-proxy bootstrap, Rust-native majors as destination
+- [ADR 0005](./docs/adr/0005-provider-trait-host-proxy-bootstrap.md): Provider trait with host-proxy bootstrap (bootstrap superseded by ADR 0019)
 - [ADR 0006](./docs/adr/0006-host-protocol-msgpack-uds.md): Host Protocol: length-prefixed MessagePack over Unix domain sockets
 - [ADR 0007](./docs/adr/0007-oracle-guided-full-parity.md): V1 bar is full parity, oracle-guided and measured by session replay
 - [ADR 0008](./docs/adr/0008-native-pi-session-format.md): Sessions use pi's native format, bidirectionally
@@ -43,6 +43,7 @@ Today's agent TUIs leave rendering quality on the table, each for a different re
 - [ADR 0016](./docs/adr/0016-core-sole-session-writer.md): The Core is the sole session writer
 - [ADR 0017](./docs/adr/0017-reload-is-host-restart.md): /reload restarts the Extension Host process
 - [ADR 0018](./docs/adr/0018-subagents-extension-core-aware.md): Subagents stay an extension. The Core is designed subagent-aware
+- [ADR 0019](./docs/adr/0019-providers-rust-native-day-one.md): Providers are Rust-native from day one, the host is strictly extensions-only (supersedes the ADR 0005 bootstrap)
 
 ## Platform support (v1)
 

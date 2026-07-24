@@ -29,12 +29,12 @@ The dedicated synchronous thread that owns the terminal and produces frames. It 
 _Avoid_: UI thread, main thread
 
 **Provider**:
-An implementation of the Core's LLM streaming interface - either Rust-native or the Host Proxy.
+A Rust-native implementation of one of pi's four API types in the Core's LLM streaming interface.
 _Avoid_: backend, model adapter
 
-**Host Proxy**:
-The Provider implementation that routes LLM traffic through pi-ai in the Extension Host.
-_Avoid_: proxy provider (as a distinct concept), passthrough
+**Host Provider Slot**:
+The protocol slot through which extension-registered custom providers stream, the only provider path that touches the Extension Host.
+_Avoid_: host proxy, passthrough
 
 **Oracle**:
 The pinned pi version whose behavior, tests, and formats define parity.

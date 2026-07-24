@@ -9,7 +9,7 @@ The ADR 0002 spike, 2-day timebox:
 1. Record the oracle pin: latest pi release on spike start day (update ADR 0007 + AGENTS.md with the exact version)
 2. Extract pi's extension API surface from the pinned version into `docs/extension-api-surface.md` - the checklist the Host Protocol must cover
 3. Stub the pi API under Deno. Load the full real extension corpus (incl. pi-subagents per ADR 0018)
-4. Stream real completions through pi-ai under Deno: Anthropic (OAuth), OpenAI, Gemini, Bedrock
+4. Register custom-provider extensions (local-models.ts) against the stubbed API (providers are otherwise Rust-native, ADR 0019)
 5. Categorize failures shimmable vs BLOCKER. Streaming BLOCKER without shim ⇒ Node host
 
 **Exit:** ADR 0002 status updated to unconditionally accepted (Deno) or superseded (Node).
@@ -35,7 +35,7 @@ The ADR 0002 spike, 2-day timebox:
 ## Phase 3 - Agent loop: dogfood slice (ADR 0007 checkpoint)
 
 - Session read/write, byte-identical re-save (ADRs 0008/0016), pi-replay harness over the JSONL corpus
-- Provider trait + host-proxy (ADR 0005). Built-in tools Rust-native (ADR 0015)
+- Provider trait with native openai-completions (testable against Ollama) and anthropic-messages incl. OAuth (ADRs 0005/0019). Built-in tools Rust-native (ADR 0015)
 - Extension API surface wired end-to-end: tools, commands, events, ctx.ui (ADR 0003), appendEntry routing
 - Basic slash commands, compaction
 
@@ -44,7 +44,7 @@ The ADR 0002 spike, 2-day timebox:
 ## Phase 4 - Parity march
 
 - Port pi's test suite feature-by-feature against the pinned oracle
-- Native Rust providers land per API type (ADR 0005): openai-completions first (covers Ollama/vLLM/OpenRouter/proxies in one implementation, per [pi's models docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md)), anthropic-messages second. Credentials leave the host as each lands
+- Remaining native API types land (ADR 0019): openai-responses and google-generative-ai, per [pi's models docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md)
 - Remaining surface: skills, prompt templates, headless mode (ADR 0018 constraint), theme completeness, session branching edge cases
 - Re-baseline the oracle pin deliberately if drift demands it
 
@@ -62,7 +62,7 @@ Decided in advance to prevent sunk-cost stubbornness. Firing a trigger means wri
 
 | Trigger | Fallback |
 |---|---|
-| Spike streaming BLOCKER without shim (Phase 0) | Node host (ADR 0002's own gate) |
+| Spike BLOCKER in extension loading or custom-provider registration without shim (Phase 0) | Node host (ADR 0002's own gate) |
 | Host-side msgpack codec loses the bring-up benchmark badly (P17) | Swap codec (msgpackr, JSON frames only if binary-safety is preserved another way) |
 | Alt-screen UX rejected at the Dogfood Checkpoint - selection/copy-mode/scrollback genuinely hurts daily work after a real fix attempt | Inline + diffed live region (supersede ADR 0004. Retained model and pipeline survive, only the screen strategy changes) |
 | Tree-sitter grammar bundling bloats binary/build unacceptably | Zed-style WASM grammar loading (research.md) |

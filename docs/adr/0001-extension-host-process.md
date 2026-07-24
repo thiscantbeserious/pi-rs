@@ -1,10 +1,10 @@
 # Extensions run in a separate Extension Host process
 
-Existing pi extensions are arbitrary TypeScript with deep Node ecosystem dependencies (node:fs, node:stream, undici, @aws-sdk, zod). Compiling them to native code via WASM is not feasible (the only AOT TS→WASM compiler, [Porffor](https://porffor.dev/), is an explicitly experimental research project supporting a restricted JS subset), and embedding a JS engine in the Rust binary requires re-implementing large parts of the Node API surface. We instead run extensions unmodified in a separate JavaScript runtime process (the Extension Host) that talks to the Rust Core over IPC - the same architecture [VS Code uses for its extension host](https://code.visualstudio.com/api/advanced-topics/extension-host).
+Existing pi extensions are arbitrary TypeScript with deep Node ecosystem dependencies (node:fs, node:stream, undici, @aws-sdk, zod). Compiling them to native code via WASM is not feasible (the only AOT TS→WASM compiler, Porffor, is an explicitly experimental research project supporting a restricted JS subset [[1]](https://porffor.dev/)), and embedding a JS engine in the Rust binary requires re-implementing large parts of the Node API surface. We instead run extensions unmodified in a separate JavaScript runtime process (the Extension Host) that talks to the Rust Core over IPC - the same architecture VS Code uses for its extension host [[2]](https://code.visualstudio.com/api/advanced-topics/extension-host).
 
 ## Considered Options
 
-- Embed deno_core/QuickJS in the binary - rejected: months of Node-compat integration work, undici/aws-sdk edge cases ([deno#30899](https://github.com/denoland/deno/issues/30899), [aws-sdk-js-v3#4405](https://github.com/aws/aws-sdk-js-v3/issues/4405))
+- Embed deno_core/QuickJS in the binary - rejected: months of Node-compat integration work, undici/aws-sdk edge cases [[3]](https://github.com/denoland/deno/issues/30899) [[4]](https://github.com/aws/aws-sdk-js-v3/issues/4405)
 - Embed libnode - rejected: painful C++ embedding, two event loops in one process, huge binary
 - WASM-compiled extensions (QuickJS-in-wasmtime or TS→WASM AOT) - rejected: not native speed, ~70-85% compat at best, async/npm bridging pain
 - New Rust/WASM-native plugin ABI only - rejected: abandons compatibility with existing extensions
@@ -17,7 +17,7 @@ Existing pi extensions are arbitrary TypeScript with deep Node ecosystem depende
 
 ## Sources
 
-- Porffor, experimental AOT TS/JS to WASM compiler: https://porffor.dev/
-- VS Code extension host architecture: https://code.visualstudio.com/api/advanced-topics/extension-host
-- undici proxy failures under Deno: https://github.com/denoland/deno/issues/30899
-- aws-sdk credential provider hangs under Deno: https://github.com/aws/aws-sdk-js-v3/issues/4405
+1. Porffor, experimental AOT TS/JS-to-WASM compiler ("Expect nothing to work!"): https://porffor.dev/
+2. VS Code extension host, separate process over RPC: https://code.visualstudio.com/api/advanced-topics/extension-host
+3. undici proxy dispatcher failures under Deno: https://github.com/denoland/deno/issues/30899
+4. aws-sdk credential provider hangs under Deno: https://github.com/aws/aws-sdk-js-v3/issues/4405

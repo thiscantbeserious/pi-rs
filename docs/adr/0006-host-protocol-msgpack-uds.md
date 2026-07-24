@@ -4,16 +4,16 @@ The Host Protocol uses length-prefixed MessagePack frames over a Unix domain soc
 
 ## Considered Options
 
-- JSON-RPC over stdio ([LSP-style](https://microsoft.github.io/language-server-protocol/specifications/base/0.9/specification/)) - rejected: JSON-escaping large ANSI/binary payloads wastes CPU. Stdio doubles as the child's stdout, so any stray console.log corrupts the stream
+- JSON-RPC over stdio (LSP-style [[1]](https://microsoft.github.io/language-server-protocol/specifications/base/0.9/specification/)) - rejected: JSON-escaping large ANSI/binary payloads wastes CPU. Stdio doubles as the child's stdout, so any stray console.log corrupts the stream
 - Shared memory ring + control channel - rejected for v1: overkill for ≤10KB@60Hz payloads, poor portability across Deno/Node, permanent debugging tax. Kept as a future escape hatch
 
 ## Consequences
 
-- Both sides use first-class libraries (rmp-serde in the Core, @msgpack/msgpack in the host). UDS works in both host runtimes ([Deno node:net compatibility](https://docs.deno.com/api/node/net/))
+- Both sides use first-class libraries (rmp-serde in the Core, @msgpack/msgpack in the host). UDS works in both host runtimes via node:net compatibility [[2]](https://docs.deno.com/api/node/net/)
 - Protocol messages must stay runtime-neutral per ADR 0002 (no engine-specific types)
 - Windows support requires a named-pipe transport variant
 
 ## Sources
 
-- LSP base protocol (JSON-RPC over stdio with headers): https://microsoft.github.io/language-server-protocol/specifications/base/0.9/specification/
-- Deno node:net Unix domain socket compatibility: https://docs.deno.com/api/node/net/
+1. LSP base protocol, JSON-RPC over stdio with headers: https://microsoft.github.io/language-server-protocol/specifications/base/0.9/specification/
+2. Deno node:net Unix domain socket compatibility: https://docs.deno.com/api/node/net/

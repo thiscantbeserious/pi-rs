@@ -1,6 +1,6 @@
 # Alternate screen with a retained message model
 
-The Core runs in the terminal's alternate screen and owns the entire grid, rendering from a retained message model rather than printing history into native scrollback. Chosen for maximum rendering control and performance: perfect re-wrap on resize, live theme switching, retroactive collapse/expand of tool output, marker-based turn navigation, and semantic search over message content - none of which an inline scrollback model can support. Precedent: [opencode's full-screen TUI](https://opencode.ai/docs/tui/) (which launches in the alternate screen buffer). Prior art: agent-session-recorder's viewport-over-buffer player. Honest counter-evidence: opencode users have requested a non-fullscreen inline mode for native scrolling and copying, confirming the trade-off is real and the copy-mode mitigations below are mandatory, not optional.
+The Core runs in the terminal's alternate screen and owns the entire grid, rendering from a retained message model rather than printing history into native scrollback. Chosen for maximum rendering control and performance: perfect re-wrap on resize, live theme switching, retroactive collapse/expand of tool output, marker-based turn navigation, and semantic search over message content - none of which an inline scrollback model can support. Precedent: opencode's full-screen TUI, which launches in the alternate screen buffer [[1]](https://opencode.ai/docs/tui/). Prior art: agent-session-recorder's viewport-over-buffer player. Honest counter-evidence: opencode users have requested a non-fullscreen inline mode for native scrolling and copying [[1]](https://opencode.ai/docs/tui/), confirming the trade-off is real and the copy-mode mitigations below are mandatory, not optional.
 
 ## Considered Options
 
@@ -10,11 +10,11 @@ The Core runs in the terminal's alternate screen and owns the entire grid, rende
 ## Consequences
 
 - Must implement: custom scrollback viewport, search, copy-mode
-- Native mouse selection is eaten by mouse capture: copy-mode and yank commands (message / code block / tool output) are the primary answer. Modifier-key passthrough is terminal-dependent and must not be relied on (Shift in xterm-style terminals, [Option in iTerm2](https://iterm2.com/documentation-preferences-profiles-terminal.html), configurable in kitty)
+- Native mouse selection is eaten by mouse capture: copy-mode and yank commands (message / code block / tool output) are the primary answer. Modifier-key passthrough is terminal-dependent and must not be relied on (Shift in xterm-style terminals, Option in iTerm2 [[2]](https://iterm2.com/documentation-preferences-profiles-terminal.html), configurable in kitty)
 - History is memory-bounded, not terminal-infinite
 - On exit, nothing remains in the terminal: dump a transcript tail to the normal screen buffer
 
 ## Sources
 
-- opencode TUI launches in the alternate screen: https://opencode.ai/docs/tui/
-- iTerm2 mouse reporting bypass uses Option, not Shift: https://iterm2.com/documentation-preferences-profiles-terminal.html
+1. opencode TUI, alternate screen launch and the user request for an inline mode: https://opencode.ai/docs/tui/
+2. iTerm2 mouse reporting bypass uses Option, not Shift: https://iterm2.com/documentation-preferences-profiles-terminal.html
