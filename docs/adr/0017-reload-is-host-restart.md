@@ -4,7 +4,7 @@
 
 ## Considered Options
 
-- In-process module reload mirroring pi's hot-reload (pi hot-reloads extensions in auto-discovered locations via /reload [[1]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md)) - rejected: a second lifecycle path plus JS module-cache invalidation quirks, for a marginal speed win on an infrequent operation
+- In-process module reload mirroring pi's hot-reload (pi hot-reloads extensions in auto-discovered locations via /reload [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)) - rejected: a second lifecycle path plus JS module-cache invalidation quirks, for a marginal speed win on an infrequent operation
 
 ## Consequences
 
@@ -13,4 +13,4 @@
 
 ## Sources
 
-1. pi extensions, /reload hot-reloads extensions from auto-discovered locations: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md
+1. pi extensions, /reload hot-reloads extensions from auto-discovered locations: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md

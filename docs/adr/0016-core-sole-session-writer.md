@@ -1,6 +1,6 @@
 # The Core is the sole session writer
 
-Only the Core writes session JSONL files. Extension calls to pi.appendEntry() (pi's documented session persistence API [[1]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md)) are routed over the Host Protocol to the Core, which serializes all appends through one writer. Single-writer discipline prevents interleaving corruption on an append-only file and keeps ADR 0008's byte-identical re-save property mechanically testable.
+Only the Core writes session JSONL files. Extension calls to pi.appendEntry() (pi's documented session persistence API [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)) are routed over the Host Protocol to the Core, which serializes all appends through one writer. Single-writer discipline prevents interleaving corruption on an append-only file and keeps ADR 0008's byte-identical re-save property mechanically testable.
 
 ## Considered Options
 
@@ -13,4 +13,4 @@ Only the Core writes session JSONL files. Extension calls to pi.appendEntry() (p
 
 ## Sources
 
-1. pi extensions, session persistence via pi.appendEntry(): https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md
+1. pi extensions, session persistence via pi.appendEntry(): https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md

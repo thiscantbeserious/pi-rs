@@ -1,6 +1,6 @@
 # Providers are Rust-native from day one, the host is strictly extensions-only
 
-Supersedes the bootstrap phase of ADR 0005. No pi core functionality ever runs in the Extension Host: the Core implements pi's API types natively in Rust, openai-completions and anthropic-messages first (the daily drivers), openai-responses and google-generative-ai after. This is tractable because pi's entire provider catalog rests on just these four API types [[1]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md). The host-provider slot in the protocol survives solely for extension-registered custom providers [[2]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/custom-provider.md), which is extension support and therefore belongs in the host by definition.
+Supersedes the bootstrap phase of ADR 0005. No pi core functionality ever runs in the Extension Host: the Core implements pi's API types natively in Rust, openai-completions and anthropic-messages first (the daily drivers), openai-responses and google-generative-ai after. This is tractable because pi's entire provider catalog rests on just these four API types [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md). The host-provider slot in the protocol survives solely for extension-registered custom providers [[2]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md), which is extension support and therefore belongs in the host by definition.
 
 ## Status
 
@@ -22,5 +22,5 @@ accepted, supersedes the host-proxy bootstrap in ADR 0005
 
 ## Sources
 
-1. pi models.json, four API types cover the catalog: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md
-2. pi custom providers, registered by extensions: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/custom-provider.md
+1. pi models.json, four API types cover the catalog: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md
+2. pi custom providers, registered by extensions: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md

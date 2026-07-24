@@ -1,9 +1,9 @@
 # pi-rs
 
-[![Created with pi](https://img.shields.io/badge/created%20with-pi-blueviolet)](https://github.com/badlogic/pi-mono)
+[![Created with pi](https://img.shields.io/badge/created%20with-pi-blueviolet)](https://github.com/earendil-works/pi)
 ![Created with GLM5.2](https://img.shields.io/badge/created%20with-GLM5.2-00b4ab)
 
-A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): native core for the terminal UI and agent loop, full compatibility with existing TypeScript pi extensions via a separate Extension Host process.
+A Rust rewrite of the [pi coding agent](https://github.com/earendil-works/pi): native core for the terminal UI and agent loop, full compatibility with existing TypeScript pi extensions via a separate Extension Host process.
 
 **Status: planning.**
 
@@ -17,7 +17,7 @@ A Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): na
 
 ## Why
 
-Today's agent TUIs leave rendering quality on the table, each for a different reason. Claude Code (Ink/React) redraws the full viewport on state changes - the documented [flicker in multiplexers](https://github.com/anthropics/claude-code/issues/37076), [typing lag](https://github.com/anthropics/claude-code/issues/31194), and [exit corruption](https://github.com/anthropics/claude-code/issues/42087) are architectural, not incidental. Codex CLI is Rust/ratatui and still ships [unstable scrollback and platform-dependent rendering](https://github.com/openai/codex/discussions/1174) - native code is necessary but not sufficient. pi does better with [differential line-based rendering](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/tui.md), but remains bounded by its JavaScript runtime and line-granular diffing. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
+Today's agent TUIs leave rendering quality on the table, each for a different reason. Claude Code (Ink/React) redraws the full viewport on state changes - the documented [flicker in multiplexers](https://github.com/anthropics/claude-code/issues/37076), [typing lag](https://github.com/anthropics/claude-code/issues/31194), and [exit corruption](https://github.com/anthropics/claude-code/issues/42087) are architectural, not incidental. Codex CLI is Rust/ratatui and still ships [unstable scrollback and platform-dependent rendering](https://github.com/openai/codex/discussions/1174) - native code is necessary but not sufficient. pi does better with [differential line-based rendering](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/tui.md), but remains bounded by its JavaScript runtime and line-granular diffing. [agent-session-recorder](https://github.com/thiscantbeserious/agent-session-recorder) demonstrated what the alternative feels like: a Rust render loop with cell-level diffing, synchronized output, and partial line updates draws in microseconds. pi-rs applies that render architecture to a full coding agent, without giving up pi's extension ecosystem.
 
 - Native render core: cell-diff frames, synchronized output, latency isolated from extension code
 - Existing pi extensions run unmodified in an Extension Host (VS Code-style architecture)
@@ -50,8 +50,8 @@ flowchart TB
         end
     end
 
-    subgraph host["Extension Host - Deno, Node fallback (ADR 0002, planned)"]
-        runtime["pi API runtime: loader + API shim (strategy decided by Phase 0 ADR)"]
+    subgraph host["Extension Host - Deno (ADR 0002, locked), vendored pi runtime (ADR 0021, planned)"]
+        runtime["Vendored pi runtime: loader + ExtensionRuntime, protocol-bound (ADR 0021)"]
         exts["pi extensions, unmodified (ADR 0001)"]
         extui["Extension UI, retained frame buffers (ADR 0003)"]
         customprov["Host Provider Slot: extension-registered custom providers only (ADR 0019)"]
@@ -106,11 +106,12 @@ flowchart TB
 - [ADR 0018](./docs/adr/0018-subagents-extension-core-aware.md): Subagents stay an extension. The Core is designed subagent-aware
 - [ADR 0019](./docs/adr/0019-providers-rust-native-day-one.md): Providers are Rust-native from day one, the host is strictly extensions-only (supersedes the ADR 0005 bootstrap)
 - [ADR 0020](./docs/adr/0020-pi-rs-binary-shared-pi-tree.md): pi-rs binary name, fully shared ~/.pi config tree
+- [ADR 0021](./docs/adr/0021-vendor-pi-runtime-as-deno-host.md): Vendor pi's extension runtime as the Deno Host, with a Rust protocol backend
 
 ## Platform support (v1)
 
 | Platform | Status |
-|---|---|
+| --- | --- |
 | Linux | supported, CI-tested |
 | macOS | supported, CI-tested |
 | WSL | supported, smoke-tested |

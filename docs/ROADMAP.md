@@ -5,7 +5,7 @@ Phases in strict dependency order. Every phase follows the same template: Status
 ### Legend
 
 | Symbol | Applies to | Meaning |
-|:---:|---|---|
+| :---: | --- | --- |
 | ⏳ | Phase status | Pending, not started |
 | 🔨 | Phase status | Active, work in progress |
 | ✅ | Phase status | Done, exit gate fully passed |
@@ -17,25 +17,25 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 0 - Compat spike
 
-**Status:** ⏳ pending | **Milestone:** M0 Runtime locked
+**Status:** ✅ done | **Milestone:** M0 Runtime locked
 
 **Objective:** retire the two biggest unknowns before any architecture hardens: does the Deno host survive contact with the real extension corpus, and is pi's extension runtime vendorable or does the host need a clean-room shim.
 
 **Deliverables:**
 
-- [ ] Oracle pin recorded: latest pi release on spike start day, written into ADR 0007 and AGENTS.md
-- [ ] `docs/extension-api-surface.md` extracted from the pinned version's installed type declarations (dist/*.d.ts in the npm package, verified present locally): the checklist the Host Protocol must cover
-- [ ] pi API stubbed under Deno, full real extension corpus loaded (incl. pi-subagents per ADR 0018)
-- [ ] Custom-provider extensions (local-models.ts) register against the stub (ADR 0019)
-- [ ] Every failure categorized: shimmable vs BLOCKER
-- [ ] Host implementation strategy recommendation with evidence: vendor pi's MIT-licensed runtime [[1]](https://github.com/badlogic/pi-mono/blob/main/LICENSE) with protocol backend vs clean-room shim (recorded as an ADR, vendored code ships pi's MIT notice)
+- [x] Oracle pin recorded: latest pi release on spike start day, written into ADR 0007 and AGENTS.md
+- [x] `docs/extension-api-surface.md` extracted from the pinned version's installed type declarations (dist/*.d.ts in the npm package, verified present locally): the checklist the Host Protocol must cover
+- [x] pi API stubbed under Deno, full real extension corpus loaded (incl. pi-subagents per ADR 0018) - 14/14 load via pi's own loader, see ADR 0021 (stub obviated: pi's own runtime loads the corpus under Deno, ADR 0021)
+- [x] Custom-provider extensions (local-models.ts) register against the stub (ADR 0019) - registerProvider path verified under Deno
+- [x] Every failure categorized: shimmable vs BLOCKER - 2 Deno write-permission denials, both shimmable, 0 BLOCKERs (ADR 0021)
+- [x] Host implementation strategy recommendation with evidence: vendor pi's MIT-licensed runtime [[1]](https://github.com/earendil-works/pi/blob/main/LICENSE) with protocol backend vs clean-room shim (recorded as ADR 0021, vendored code ships pi's MIT notice)
 
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
-|---|---|---|
-| ADR 0002 resolved: unconditionally accepted (Deno) or superseded (Node) | Updated ADR in docs/adr/ | ⬜ |
-| Host implementation strategy decided | New ADR with spike evidence | ⬜ |
+| --- | --- | --- |
+| ADR 0002 resolved: unconditionally accepted (Deno) or superseded (Node) | Updated ADR in docs/adr/ | ✅ |
+| Host implementation strategy decided | New ADR with spike evidence | ✅ |
 
 **Explicitly out:** any Rust code beyond what the stub needs, protocol design, rendering work.
 
@@ -58,7 +58,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
-|---|---|---|
+| --- | --- | --- |
 | Typed protocol round-trip: Core to host and back | Demo runnable from CI | ⬜ |
 | kill -9 the host: Core survives, prompts, respawns | Scripted chaos test | ⬜ |
 
@@ -85,7 +85,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
-|---|---|---|
+| --- | --- | --- |
 | 20MB-class session replays at full speed inside tmux, zero visual artifacts | Recorded replay run | ⬜ |
 | Frame-time and input-latency benchmarks green | CI baselines committed | ⬜ |
 
@@ -102,7 +102,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Deliverables:**
 
 - [ ] Session read/write with byte-identical re-save (ADRs 0008/0016), pi-replay harness over the Session Corpus
-- [ ] Native providers: openai-completions, verified against Ollama which serves a partially OpenAI-compatible /v1/chat/completions endpoint [[5]](https://docs.ollama.com/api/openai-compatibility) (not currently installed, becomes a Phase 3 test dependency), and anthropic-messages incl. Claude Pro/Max subscription OAuth with auth.json interop, matching pi's /login flow with auto-refreshing tokens in ~/.pi/agent/auth.json [[6]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md) (ADRs 0019/0020)
+- [ ] Native providers: openai-completions, verified against Ollama which serves a partially OpenAI-compatible /v1/chat/completions endpoint [[5]](https://docs.ollama.com/api/openai-compatibility) (not currently installed, becomes a Phase 3 test dependency), and anthropic-messages incl. Claude Pro/Max subscription OAuth with auth.json interop, matching pi's /login flow with auto-refreshing tokens in ~/.pi/agent/auth.json [[6]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md) (ADRs 0019/0020)
 - [ ] Built-in tools Rust-native with pi-parity defaults (ADR 0015)
 - [ ] Extension API wired end-to-end: tools, commands, events, ctx.ui frame buffers and focus routing (ADR 0003), appendEntry routing (ADR 0016)
 - [ ] Slash commands and compaction at daily-work fidelity
@@ -111,7 +111,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
-|---|---|---|
+| --- | --- | --- |
 | 5 consecutive workdays, all interactive agent work on pi-rs | agr recordings | ⬜ |
 | 0 blocking fallbacks to pi (blocking fallback resets the streak) | Dogfood journal | ⬜ |
 | Alt-screen verdict recorded: keep ADR 0004 or fire its trigger | Journal entry + ADR if fired | ⬜ |
@@ -129,14 +129,14 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Deliverables:**
 
 - [ ] pi's test suite ported feature-by-feature against the Oracle
-- [ ] Remaining native API types: openai-responses, google-generative-ai, completing pi's four-type provider catalog [[9]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md) (ADR 0019)
+- [ ] Remaining native API types: openai-responses, google-generative-ai, completing pi's four-type provider catalog [[9]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) (ADR 0019)
 - [ ] Remaining surface: skills, prompt templates, headless mode (ADR 0018), theme completeness, session branching edge cases
 - [ ] Oracle re-baseline performed deliberately if drift demands it, delta-ported and recorded
 
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
-|---|---|---|
+| --- | --- | --- |
 | Ported oracle tests pass | CI suite green | ⬜ |
 | Session Corpus replays green with byte-identical re-save (ADR 0007) | pi-replay run in CI | ⬜ |
 
@@ -159,7 +159,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
-|---|---|---|
+| --- | --- | --- |
 | Clean VM/container install via the documented path | Recorded install run | ⬜ |
 | Smoke script: starts, loads corpus, streams, resumes a pi session | Script in repo, run logged | ⬜ |
 | Release pipeline green: tag, changelog, binaries | release.yml run | ⬜ |
@@ -172,7 +172,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 Decided in advance to prevent sunk-cost stubbornness. Firing a trigger means writing the superseding ADR and taking the fallback, not relitigating.
 
 | Trigger | Armed in | Fallback |
-|---|---|---|
+| --- | --- | --- |
 | Spike BLOCKER in extension loading or custom-provider registration without shim | Phase 0 | Node host (ADR 0002's own gate) |
 | Host-side msgpack codec loses the bring-up benchmark badly (P17) | Phase 1 | Swap codec (msgpackr, JSON frames only if binary-safety is preserved another way) |
 | Tree-sitter grammar bundling bloats binary/build unacceptably | Phase 2 | Zed-style WASM grammar loading (research.md) |
@@ -184,15 +184,15 @@ Decided in advance to prevent sunk-cost stubbornness. Firing a trigger means wri
 
 Each source backs the claim at its inline [[n]] marker and cross-references the ADR where the decision is documented.
 
-1. pi is MIT licensed (LICENSE at repo root, vendoring premise of the Phase 0 strategy decision): https://github.com/badlogic/pi-mono/blob/main/LICENSE
-2. ts-rs, Rust to TypeScript type generation (working default per research.md, serves ADR 0011): https://docs.rs/ts-rs
-3. @msgpack/msgpack, reference JS implementation (codec candidate for ADR 0006, pitfall P17): https://github.com/msgpack/msgpack-javascript
-4. msgpackr, claims fastest JS MessagePack incl. faster than native JSON.parse on NodeJS (codec candidate for ADR 0006, pitfall P17): https://github.com/kriszyp/msgpackr
-5. Ollama OpenAI compatibility, partial /v1/chat/completions support (test target for ADR 0019's openai-completions): https://docs.ollama.com/api/openai-compatibility
-6. pi providers, /login for Claude Pro/Max, tokens auto-refresh in ~/.pi/agent/auth.json (reference for ADR 0019 OAuth and ADR 0020 shared tree): https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md
-7. screenpipe, local 24/7 screen memory already running on the author's machine (dogfood evidence, Phase 3 gate): https://github.com/mediar-ai/screenpipe
-8. agent-session-recorder, records agent terminal sessions (dogfood evidence, Phase 3 gate): https://github.com/thiscantbeserious/agent-session-recorder
-9. pi models, the four API types covering the catalog (basis of ADR 0019): https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md
+1. pi is MIT licensed (LICENSE at repo root, vendoring premise of the Phase 0 strategy decision): <https://github.com/earendil-works/pi/blob/main/LICENSE>
+2. ts-rs, Rust to TypeScript type generation (working default per research.md, serves ADR 0011): <https://docs.rs/ts-rs>
+3. @msgpack/msgpack, reference JS implementation (codec candidate for ADR 0006, pitfall P17): <https://github.com/msgpack/msgpack-javascript>
+4. msgpackr, claims fastest JS MessagePack incl. faster than native JSON.parse on NodeJS (codec candidate for ADR 0006, pitfall P17): <https://github.com/kriszyp/msgpackr>
+5. Ollama OpenAI compatibility, partial /v1/chat/completions support (test target for ADR 0019's openai-completions): <https://docs.ollama.com/api/openai-compatibility>
+6. pi providers, /login for Claude Pro/Max, tokens auto-refresh in ~/.pi/agent/auth.json (reference for ADR 0019 OAuth and ADR 0020 shared tree): <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md>
+7. screenpipe, local 24/7 screen memory already running on the author's machine (dogfood evidence, Phase 3 gate): <https://github.com/mediar-ai/screenpipe>
+8. agent-session-recorder, records agent terminal sessions (dogfood evidence, Phase 3 gate): <https://github.com/thiscantbeserious/agent-session-recorder>
+9. pi models, the four API types covering the catalog (basis of ADR 0019): <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md>
 
 ## Post-parity (explicitly deferred)
 

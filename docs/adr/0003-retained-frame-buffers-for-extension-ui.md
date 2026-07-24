@@ -12,9 +12,9 @@ The Core renders with a cell-diff, synchronized-output (DEC 2026) frame loop tha
 - The frame loop is latency-isolated from extensions: worst case a component's region is one message stale
 - Input events stream asynchronously from Core to the owning extension
 - Input focus is Core-owned: exactly one focus owner at a time. Modal extension UI (ctx.ui.select/confirm/custom) receives an explicit focus grant from the Core and returns it on close - focus routing is part of the Host Protocol, not an extension concern
-- The existing render(width)/invalidate/requestRender extension API shape [[2]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/tui.md) is preserved
+- The existing render(width)/invalidate/requestRender extension API shape [[2]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/tui.md) is preserved
 
 ## Sources
 
 1. VS Code extension host, UI access is mediated, extensions cannot touch the DOM directly: https://code.visualstudio.com/api/advanced-topics/extension-host
-2. pi TUI component model, render(width) to string[], invalidate, requestRender: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/tui.md
+2. pi TUI component model, render(width) to string[], invalidate, requestRender: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/tui.md

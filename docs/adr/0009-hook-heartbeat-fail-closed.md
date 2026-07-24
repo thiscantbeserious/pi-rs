@@ -1,6 +1,6 @@
 # Tool-call hooks: unbounded await, heartbeat liveness, fail-closed
 
-Extensions intercept tool calls across the Host Protocol (pi's event interception lets extensions block or modify tool calls [[1]](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md)), and legitimate hooks wait on human decisions (e.g. safety-guard confirmation dialogs), so hook verdicts are awaited without a timeout. Liveness is a separate concern: the Core heartbeats the Extension Host. A hook counts as hung only when heartbeats stop, not when it is slow. On a hung or dead host, intercepted tool calls fail closed (denied) and the Core surfaces a native prompt - restart host / bypass once / abort turn. Security extensions keep their guarantees. A human choice, never a silent bypass, is the only escape hatch.
+Extensions intercept tool calls across the Host Protocol (pi's event interception lets extensions block or modify tool calls [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)), and legitimate hooks wait on human decisions (e.g. safety-guard confirmation dialogs), so hook verdicts are awaited without a timeout. Liveness is a separate concern: the Core heartbeats the Extension Host. A hook counts as hung only when heartbeats stop, not when it is slow. On a hung or dead host, intercepted tool calls fail closed (denied) and the Core surfaces a native prompt - restart host / bypass once / abort turn. Security extensions keep their guarantees. A human choice, never a silent bypass, is the only escape hatch.
 
 ## Considered Options
 
@@ -20,4 +20,4 @@ Hook verdicts fail closed, but a tool already executing in the host when the hos
 
 ## Sources
 
-1. pi extensions, event interception (block or modify tool calls): https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md
+1. pi extensions, event interception (block or modify tool calls): https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md

@@ -1,6 +1,6 @@
 # pi-rs - Agent Instructions
 
-Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): native Core (TUI, renderer, agent loop) + TypeScript Extension Host running existing pi extensions unmodified. **Status: planning complete, implementation not started.** The next milestone is Phase 0 (compat spike) in **docs/ROADMAP.md** - phases are dependency-ordered with explicit exit gates. Do not start a phase before its gate.
+Rust rewrite of the [pi coding agent](https://github.com/earendil-works/pi): native Core (TUI, renderer, agent loop) + TypeScript Extension Host running existing pi extensions unmodified. **Status: Phase 0 (compat spike) complete - Deno host locked in, pi runtime vendored (ADR 0021).** The next milestone is Phase 1 (walking skeleton) in **docs/ROADMAP.md** - phases are dependency-ordered with explicit exit gates. Do not start a phase before its gate.
 
 ## Read before working
 
@@ -14,7 +14,7 @@ Rust rewrite of the [pi coding agent](https://github.com/badlogic/pi-mono): nati
 
 ## Architecture in one breath
 
-Alt-screen Rust TUI rendering from the Retained Message Model on a dedicated synchronous Render Thread (never awaits). Tokio for everything async. Extensions in a separate Deno process (Node fallback) speaking length-prefixed MessagePack over UDS. Protocol types defined once in Rust, TypeScript generated, Providers behind a trait (Host Proxy first, Rust-native majors later). Built-in tools Rust-native in the Core. Pi session files read/written bidirectionally with the Core as sole writer. Hooks awaited unbounded with heartbeat liveness, fail-closed, /reload = host restart. Subagents stay an extension but headless mode is a Core design constraint.
+Alt-screen Rust TUI rendering from the Retained Message Model on a dedicated synchronous Render Thread (never awaits). Tokio for everything async. Extensions in a separate Deno process (pi runtime vendored per ADR 0021, Node fallback stood down) speaking length-prefixed MessagePack over UDS. Protocol types defined once in Rust, TypeScript generated, Providers behind a trait (Host Proxy first, Rust-native majors later). Built-in tools Rust-native in the Core. Pi session files read/written bidirectionally with the Core as sole writer. Hooks awaited unbounded with heartbeat liveness, fail-closed, /reload = host restart. Subagents stay an extension but headless mode is a Core design constraint.
 
 ## Layout (target: cargo workspace, ADR 0011)
 
@@ -52,10 +52,10 @@ The mermaid diagram in README.md (Target architecture) is the single visual sour
 - pi-rs must not write session entries pi cannot read (ADR 0008) while interop holds
 - Only the Core writes session files. AppendEntry routes over the protocol (ADR 0016)
 - v1 platforms: Linux, macOS, WSL. Native Windows is post-parity (ADR 0014)
-- Parity target is a pinned pi version (record the pin when the spike starts - ROADMAP Phase 0)
+- Parity target is a pinned pi version, recorded at Phase 0 spike start (pi 0.82.0, ADR 0007)
 
 ## Open operational items (not in code)
 
 - SonarCloud project import + SONAR_TOKEN secret, Codecov enable + CODECOV_TOKEN secret (CI gates fail until then)
-- Oracle pin: record exact pi version at spike start (ADR 0007 + here)
-- `docs/extension-api-surface.md`: extract from the pinned pi during Phase 0 - the Host Protocol coverage checklist
+- Oracle pin: recorded at Phase 0 spike start (2026-07-24) as pi `0.82.0` (`@earendil-works/pi-coding-agent`, repo `earendil-works/pi`). See ADR 0007
+- `docs/extension-api-surface.md`: extracted from the pinned pi 0.82.0 dist type declarations during Phase 0 - the Host Protocol coverage checklist

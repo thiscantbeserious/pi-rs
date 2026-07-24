@@ -24,8 +24,8 @@ Field-verified failure modes from existing agent TUIs. Each entry names the guar
 
 | # | Pitfall | Evidence | Guard in pi-rs |
 |---|---------|----------|----------------|
-| P9 | Line-granular diffing repaints whole lines for single-cell changes | [pi tui docs, render(width) returns line arrays](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/tui.md) | Cell-granular diffing (ADR 0004) |
-| P10 | JS runtime cost in the render path (GC pauses, event-loop scheduling between data and draw) | [pi is a TypeScript/Node TUI](https://github.com/badlogic/pi-mono) | No JS in the render path - extension UI arrives pre-rendered as retained buffers (ADR 0003) |
+| P9 | Line-granular diffing repaints whole lines for single-cell changes | [pi tui docs, render(width) returns line arrays](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/tui.md) | Cell-granular diffing (ADR 0004) |
+| P10 | JS runtime cost in the render path (GC pauses, event-loop scheduling between data and draw) | [pi is a TypeScript/Node TUI](https://github.com/earendil-works/pi) | No JS in the render path - extension UI arrives pre-rendered as retained buffers (ADR 0003) |
 | P11 | Streaming markdown re-render cost grows with message size | Adjacent evidence: [claude-code#31194](https://github.com/anthropics/claude-code/issues/31194) (render-blocked typing under streaming). For pi this is an observation, to be quantified in Phase 2 benchmarks | Frame coalescing + block-granular highlight caching + incremental tree-sitter on the tail block only (ADR 0010) |
 
 ## Technique pitfalls - traps inside our own chosen techniques
