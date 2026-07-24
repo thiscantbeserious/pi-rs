@@ -1,12 +1,12 @@
 # Roadmap
 
-Phases in strict dependency order. Every phase follows the same template: Status, Objective (the risk this phase retires), Deliverables (each one testable), Exit gate (measurable, checked off in the PR that passes it), Explicitly out (the scope fence), Triggers armed (which pre-agreed fallbacks can fire). A phase starts only when the previous exit gate is checked. Goals priority (docs/GOALS.md) arbitrates all within-phase trade-offs. Status values: pending, active, done.
+Phases in strict dependency order. Every phase follows the same template: Status, Objective (the risk this phase retires), Deliverables (each one testable), Exit gate (measurable, checked off in the PR that passes it), Explicitly out (the scope fence), Triggers armed (which pre-agreed fallbacks can fire). A phase starts only when the previous exit gate is fully ✅. Goals priority (docs/GOALS.md) arbitrates all within-phase trade-offs. Status values: ⏳ pending, 🔨 active, ✅ done. Gate checks: ⬜ open, ✅ passed, ❌ failed (fires the armed trigger or blocks).
 
 Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbeserious/pi-rs/milestones) (M0-M5). Every issue and PR attaches to the milestone whose gate it serves.
 
 ## Phase 0 - Compat spike
 
-**Status:** pending | **Milestone:** M0 Runtime locked
+**Status:** ⏳ pending | **Milestone:** M0 Runtime locked
 
 **Objective:** retire the two biggest unknowns before any architecture hardens: does the Deno host survive contact with the real extension corpus, and is pi's extension runtime vendorable or does the host need a clean-room shim.
 
@@ -19,10 +19,12 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Every failure categorized: shimmable vs BLOCKER
 - [ ] Host implementation strategy recommendation with evidence: vendor pi's MIT-licensed runtime [[1]](https://github.com/badlogic/pi-mono/blob/main/LICENSE) with protocol backend vs clean-room shim (recorded as an ADR, vendored code ships pi's MIT notice)
 
-**Exit gate:**
+**Exit gate 🚦**
 
-- [ ] ADR 0002 status resolved: unconditionally accepted (Deno) or superseded (Node)
-- [ ] Host implementation strategy ADR written
+| 🎯 Gate check | Proof | Status |
+|---|---|---|
+| ADR 0002 resolved: unconditionally accepted (Deno) or superseded (Node) | Updated ADR in docs/adr/ | ⬜ |
+| Host implementation strategy decided | New ADR with spike evidence | ⬜ |
 
 **Explicitly out:** any Rust code beyond what the stub needs, protocol design, rendering work.
 
@@ -30,7 +32,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 1 - Walking skeleton
 
-**Status:** pending | **Milestone:** M1 Skeleton survives kill -9
+**Status:** ⏳ pending | **Milestone:** M1 Skeleton survives kill -9
 
 **Objective:** retire the integration risk: the thinnest end-to-end line through Core, protocol, and host exists and survives violence, before any feature work.
 
@@ -42,10 +44,12 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Host lifecycle: boot, handshake, heartbeat (ADR 0009), restart and /reload path (ADR 0017)
 - [ ] CI Deno lane with protocol conformance tests generated from pi-protocol
 
-**Exit gate:**
+**Exit gate 🚦**
 
-- [ ] Round-trip demo: a message crosses Core to host and back through the typed protocol
-- [ ] kill -9 the host: Core survives, surfaces the native prompt, respawns the host
+| 🎯 Gate check | Proof | Status |
+|---|---|---|
+| Typed protocol round-trip: Core to host and back | Demo runnable from CI | ⬜ |
+| kill -9 the host: Core survives, prompts, respawns | Scripted chaos test | ⬜ |
 
 **Explicitly out:** rendering, providers, real extension API coverage, tools.
 
@@ -53,7 +57,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 2 - Render core
 
-**Status:** pending | **Milestone:** M2 Renderer proven
+**Status:** ⏳ pending | **Milestone:** M2 Renderer proven
 
 **Objective:** retire the rendering-performance risk, the reason this project exists (GOALS.md goal 1), with measured evidence instead of belief.
 
@@ -67,10 +71,12 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Theme loading from the shared ~/.pi tree (ADRs 0012/0020)
 - [ ] Frame-time and input-latency benchmarks under synthetic streaming workloads, wired into CI
 
-**Exit gate:**
+**Exit gate 🚦**
 
-- [ ] A large stored session (20MB-class) replays through the renderer at full speed inside tmux with zero visual artifacts
-- [ ] Benchmarks green in CI with recorded baselines
+| 🎯 Gate check | Proof | Status |
+|---|---|---|
+| 20MB-class session replays at full speed inside tmux, zero visual artifacts | Recorded replay run | ⬜ |
+| Frame-time and input-latency benchmarks green | CI baselines committed | ⬜ |
 
 **Explicitly out:** agent loop, providers, extension execution (host frame buffers may be faked).
 
@@ -78,7 +84,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 3 - Dogfood slice
 
-**Status:** pending | **Milestone:** M3 Dogfood verdict
+**Status:** ⏳ pending | **Milestone:** M3 Dogfood verdict
 
 **Objective:** retire the daily-usability risk and deliver the verdict on the alt-screen UX bet (ADR 0004) with real work, not demos.
 
@@ -91,11 +97,13 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Slash commands and compaction at daily-work fidelity
 - [ ] Dogfood journal (docs/dogfood-journal.md) for fallback events. Evidence comes from agent-session-recorder, which verifiably records the author's agent sessions today [[8]](https://github.com/thiscantbeserious/agent-session-recorder), optionally screenpipe [[7]](https://github.com/mediar-ai/screenpipe) if (re)enabled (local check showed it not running). No new tooling built
 
-**Exit gate:**
+**Exit gate 🚦**
 
-- [ ] 5 consecutive workdays where all interactive agent work ran on pi-rs
-- [ ] 0 blocking fallbacks to pi in that window (curiosity visits allowed, a blocking fallback resets the streak)
-- [ ] Alt-screen verdict recorded: keep ADR 0004 or fire its trigger
+| 🎯 Gate check | Proof | Status |
+|---|---|---|
+| 5 consecutive workdays, all interactive agent work on pi-rs | agr recordings | ⬜ |
+| 0 blocking fallbacks to pi (blocking fallback resets the streak) | Dogfood journal | ⬜ |
+| Alt-screen verdict recorded: keep ADR 0004 or fire its trigger | Journal entry + ADR if fired | ⬜ |
 
 **Explicitly out:** remaining API types, skills, prompt templates, headless mode, theme completeness, full parity surface.
 
@@ -103,7 +111,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 4 - Parity march
 
-**Status:** pending | **Milestone:** M4 Parity green
+**Status:** ⏳ pending | **Milestone:** M4 Parity green
 
 **Objective:** retire the parity claim itself: turn "pi-rs equals pi" from intention into a measured, green checklist against the pinned Oracle.
 
@@ -114,10 +122,12 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Remaining surface: skills, prompt templates, headless mode (ADR 0018), theme completeness, session branching edge cases
 - [ ] Oracle re-baseline performed deliberately if drift demands it, delta-ported and recorded
 
-**Exit gate:**
+**Exit gate 🚦**
 
-- [ ] Ported oracle tests pass
-- [ ] Session Corpus replays green with byte-identical re-save (ADR 0007)
+| 🎯 Gate check | Proof | Status |
+|---|---|---|
+| Ported oracle tests pass | CI suite green | ⬜ |
+| Session Corpus replays green with byte-identical re-save (ADR 0007) | pi-replay run in CI | ⬜ |
 
 **Explicitly out:** distribution, announcement, post-parity list.
 
@@ -125,7 +135,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 5 - Release v1.0
 
-**Status:** pending | **Milestone:** M5 Shipped
+**Status:** ⏳ pending | **Milestone:** M5 Shipped
 
 **Objective:** retire the stranger-install risk: prove the release works on a machine that has never seen the project, not just on the dev machine.
 
@@ -135,12 +145,14 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Release machinery mirrored from agent-session-recorder: release.yml, changelog (cliff), tag validation hooks
 - [ ] Announcement artifact
 
-**Exit gate:**
+**Exit gate 🚦**
 
-- [ ] Clean VM/container: install via the documented path succeeds
-- [ ] Smoke script passes: starts, loads the extension corpus, streams a completion, resumes a pi session
-- [ ] Release pipeline green: tagged, changelog, binaries attached
-- [ ] Support matrix verified per ADR 0014
+| 🎯 Gate check | Proof | Status |
+|---|---|---|
+| Clean VM/container install via the documented path | Recorded install run | ⬜ |
+| Smoke script: starts, loads corpus, streams, resumes a pi session | Script in repo, run logged | ⬜ |
+| Release pipeline green: tag, changelog, binaries | release.yml run | ⬜ |
+| Support matrix verified per ADR 0014 | Per-platform checklist | ⬜ |
 
 **Explicitly out:** everything in the post-parity list.
 
