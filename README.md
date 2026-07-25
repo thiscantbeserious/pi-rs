@@ -107,6 +107,8 @@ flowchart TB
 - [ADR 0019](./docs/adr/0019-providers-rust-native-day-one.md): Providers are Rust-native from day one, the host is strictly extensions-only (supersedes the ADR 0005 bootstrap)
 - [ADR 0020](./docs/adr/0020-pi-rs-binary-shared-pi-tree.md): pi-rs binary name, fully shared ~/.pi config tree
 - [ADR 0021](./docs/adr/0021-vendor-pi-runtime-as-deno-host.md): Vendor pi's extension runtime as the Deno Host, with a Rust protocol backend
+- [ADR 0022](./docs/adr/0022-phase-1-host-protocol-minimal-set-framing-lifecycle.md): Phase 1 Host Protocol minimal message set, framing, and lifecycle semantics
+- [ADR 0023](./docs/adr/0023-phase-1-host-lifecycle-state-machine-supervision-restart.md): Phase 1 host lifecycle state machine, supervision, and restart policy
 
 ## Platform support (v1)
 
