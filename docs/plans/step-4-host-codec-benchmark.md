@@ -25,11 +25,14 @@ Pitfall P17 and ADR 0006 require benchmarking `@msgpack/msgpack` vs `msgpackr` a
 
 ## TDD order
 
-This is a benchmark, not a correctness feature, so "RED" is "no benchmark exists, no numbers recorded." The benchmark script is the test. The codec interface gets a round-trip correctness test (encode then decode equals input) for each codec.
+This is a benchmark, not a correctness feature, so "RED" is "no benchmark exists, no numbers recorded." The benchmark script is the test. The codec interface gets correctness tests.
 
 1. Codec interface + a round-trip test per codec (RED: no interface. GREEN: interface + both impls).
-2. Benchmark script measuring both codecs on the payload mix. Output a table.
-3. Run the benchmark, record the numbers + decision in docs/research.md.
+2. Cross-codec decode test: decode every encoder's output with every codec. A self-round-trip can pass when a codec emits a representation its peer cannot consume; the cross-codec check catches that (added during CodeRabbit review).
+3. Benchmark script measuring both codecs on the payload mix. Output a table.
+4. Run the benchmark, record the decision in `docs/research.md` (canonical) and the plan doc.
+
+Step 5 consumes the `Codec` interface and `msgpackCodec` from `host/codec.ts` to wire the chosen codec into the host transport.
 
 ## Oracle citations
 
@@ -37,18 +40,19 @@ The codec choice is pi-rs-native (pi is single-process; the Host Protocol is new
 
 ## Result (recorded after the benchmark ran)
 
-Geomean combined encode+decode ratio (@msgpack/msgpack / msgpackr): **1.69x**, within the 2x threshold. ADR 0006's default (`@msgpack/msgpack`) holds. The codec-swap trigger did not fire.
+**Decision: the host codec is `@msgpack/msgpack` (ADR 0006 default).** The codec-swap trigger did not fire.
 
-| Payload | Combined ratio | Notes |
-| --- | --- | --- |
-| Handshake | ~1.5x | small control message |
-| Heartbeat | ~1.5x | small control message |
-| Shutdown | ~1.5x | small control message |
-| EchoRequest-small | ~1.3x | small with binary payload |
-| ProtocolError | ~1.7x | small with string message |
-| EchoRequest-1MiB-binary | 0.83x | msgpackr faster on large binary decode (2.86x), @msgpack/msgpack faster on encode |
+Geomean combined encode+decode ratio (`@msgpack/msgpack` / `msgpackr`) measured across the protocol payload mix: consistently in the **1.7x-1.8x range across runs**, under the 2x threshold. The benchmark has run-to-run variance (JIT, GC, system load) high enough that exact per-payload numbers are not stable between runs, so they are not recorded here as fixed figures. The geomean is consistently under 2x across multiple runs, which is what the decision rests on.
 
-Notable: the 1 MiB binary decode case is where msgpackr's native acceleration shows (2.86x faster than @msgpack/msgpack). On small messages msgpackr wins by ~1.3-1.7x. The decision holds but the margin (1.69x) is close enough that a future re-benchmark is warranted if the protocol payload mix shifts toward large binary frames.
+Observed per-run pattern (not stable enough to be the decision basis, recorded for context):
+
+- Small control messages (Handshake, Heartbeat, Shutdown): msgpackr faster by ~1.3x-2.7x, varies by run.
+- EchoRequest-small and ProtocolError: msgpackr faster by ~1.3x-1.7x.
+- EchoRequest-1MiB-binary: the most volatile case. msgpackr's native-acceleration decode path sometimes beats `@msgpack/msgpack` by ~2.9x, sometimes `@msgpack/msgpack` wins. This case alone swings the geomean.
+
+Notable: the 1 MiB binary decode case is where msgpackr's native acceleration shows when it engages. This refines P17: the msgpack win is binary-safety and payload size, but msgpackr's native acceleration makes the large-binary-decode case volatile. The decision holds at ~1.7-1.8x geomean; re-benchmark if the protocol payload mix shifts toward large binary frames, since that case is closest to the 2x threshold and the most variable.
+
+The decision and the per-run observations live in `docs/research.md` as the canonical record. Step 5 consumes the `Codec` interface and `msgpackCodec` from `host/codec.ts`.
 
 ## Out of scope
 

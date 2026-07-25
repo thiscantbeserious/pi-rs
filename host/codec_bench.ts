@@ -83,7 +83,11 @@ function benchEncode(codec: Codec, value: unknown, iterations: number): number {
 	return performance.now() - start;
 }
 
-function benchDecode(codec: Codec, bytes: Uint8Array, iterations: number): number {
+function benchDecode(
+	codec: Codec,
+	bytes: Uint8Array,
+	iterations: number,
+): number {
 	for (let i = 0; i < WARMUP; i++) codec.decode(bytes);
 	const start = performance.now();
 	for (let i = 0; i < iterations; i++) codec.decode(bytes);
