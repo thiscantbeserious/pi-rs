@@ -63,12 +63,19 @@ pub fn build_context_entries<'a>(
     };
     let compaction_id = compaction.id().to_string();
     let compaction_idx = path.iter().position(|e| e.id() == compaction_id).unwrap();
-    let (first_kept_entry_id, _) = match compaction {
+    let first_kept_entry_id = match compaction {
         SessionEntry::Compaction {
             first_kept_entry_id,
             ..
-        } => (first_kept_entry_id.as_str(), ()),
+        } => first_kept_entry_id.as_deref(),
         _ => unreachable!("matched compaction"),
+    };
+    let Some(first_kept_entry_id) = first_kept_entry_id else {
+        // A compaction without firstKeptEntryId (un-migrated v1). Nothing to
+        // keep before it; return the compaction plus everything after.
+        let mut context: Vec<&SessionEntry> = vec![compaction];
+        context.extend(path.iter().skip(compaction_idx + 1));
+        return context;
     };
     let mut context: Vec<&SessionEntry> = vec![compaction];
     let mut found_first_kept = false;
@@ -172,7 +179,8 @@ mod tests {
             SessionEntry::Compaction {
                 base: base("c1", Some("m1")),
                 summary: "s".into(),
-                first_kept_entry_id: "m2".into(),
+                first_kept_entry_id: Some("m2".into()),
+                first_kept_entry_index: None,
                 tokens_before: 100,
                 details: None,
                 usage: None,

@@ -282,4 +282,82 @@ mod tests {
             _ => panic!("entry moved"),
         }
     }
+
+    /// Helper: parse a v1 session JSONL string into FileEntry, exercising the
+    /// real parse->migrate path (not a hand-built typed struct).
+    fn parse_v1(contents: &str) -> Vec<FileEntry> {
+        let mut entries = crate::parse::parse_session_str(contents);
+        migrate_to_current_version(&mut entries).unwrap();
+        entries
+    }
+
+    #[test]
+    fn v1_compaction_index_resolves_to_existing_target_id() {
+        // Target entry already has an id in v1. firstKeptEntryIndex points at
+        // it positionally; migration must resolve to that existing id.
+        let contents = "{\"type\":\"session\",\"id\":\"h\",\"timestamp\":\"t\",\"cwd\":\"/c\"}\n\
+            {\"type\":\"message\",\"id\":\"m1\",\"timestamp\":\"t\",\"message\":{\"role\":\"user\",\"content\":\"a\"}}\n\
+            {\"type\":\"message\",\"id\":\"m2\",\"parentId\":\"m1\",\"timestamp\":\"t\",\"message\":{\"role\":\"assistant\",\"content\":\"b\"}}\n\
+            {\"type\":\"compaction\",\"id\":\"k1\",\"parentId\":\"m2\",\"timestamp\":\"t\",\"summary\":\"s\",\"firstKeptEntryIndex\":1,\"tokensBefore\":10}\n";
+        let entries = parse_v1(contents);
+        // Find the compaction entry.
+        let compaction = entries
+            .iter()
+            .find(|e| {
+                matches!(
+                    e,
+                    FileEntry::Entry(crate::entry::SessionEntry::Compaction { .. })
+                )
+            })
+            .expect("compaction present after migration");
+        match compaction {
+            FileEntry::Entry(crate::entry::SessionEntry::Compaction {
+                first_kept_entry_id,
+                first_kept_entry_index,
+                ..
+            }) => {
+                assert_eq!(
+                    first_kept_entry_id.as_deref(),
+                    Some("m1"),
+                    "index 1 -> m1's id"
+                );
+                assert_eq!(*first_kept_entry_index, None, "index field cleared");
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn v1_compaction_index_resolves_to_newly_generated_target_id() {
+        // Target entry has NO id in v1. firstKeptEntryIndex points at it;
+        // migration assigns it an id in pass 1, then pass 2 resolves the
+        // index to that newly-assigned id (not an empty string).
+        let contents = "{\"type\":\"session\",\"id\":\"h\",\"timestamp\":\"t\",\"cwd\":\"/c\"}\n\
+            {\"type\":\"message\",\"timestamp\":\"t\",\"message\":{\"role\":\"user\",\"content\":\"a\"}}\n\
+            {\"type\":\"message\",\"timestamp\":\"t\",\"message\":{\"role\":\"assistant\",\"content\":\"b\"}}\n\
+            {\"type\":\"compaction\",\"timestamp\":\"t\",\"summary\":\"s\",\"firstKeptEntryIndex\":1,\"tokensBefore\":10}\n";
+        let entries = parse_v1(contents);
+        // The target is index 1 in the full entries array (the first message;
+        // the Oracle indexes the array including the header at 0). It got an
+        // id assigned in pass 1.
+        let target_id = match &entries[1] {
+            FileEntry::Entry(crate::entry::SessionEntry::Message { base, .. }) => base.id.clone(),
+            _ => panic!("entry 1 is the target message"),
+        };
+        assert!(!target_id.is_empty(), "target got an id in pass 1");
+        let compaction = match &entries[3] {
+            FileEntry::Entry(crate::entry::SessionEntry::Compaction {
+                first_kept_entry_id,
+                first_kept_entry_index,
+                ..
+            }) => (first_kept_entry_id.clone(), *first_kept_entry_index),
+            _ => panic!("entry 3 is the compaction"),
+        };
+        assert_eq!(
+            compaction.0.as_deref(),
+            Some(target_id.as_str()),
+            "index 1 -> target's new id"
+        );
+        assert_eq!(compaction.1, None, "index field cleared");
+    }
 }

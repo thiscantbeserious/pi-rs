@@ -14,10 +14,14 @@ use serde_json::Value;
 
 /// Base fields every non-header entry carries. `id`/`parentId` form the tree.
 /// The `type` tag is owned by the `SessionEntry` enum, not here.
+///
+/// `id` defaults to an empty string so v1 entries (which predate `id`/`parentId`)
+/// parse; migration assigns real ids. A v3 entry always has a non-empty `id`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct EntryBase {
+    #[serde(default)]
     pub id: String,
-    #[serde(rename = "parentId")]
+    #[serde(rename = "parentId", default)]
     pub parent_id: Option<String>,
     pub timestamp: String,
 }
@@ -54,13 +58,30 @@ pub enum SessionEntry {
     },
     /// Compaction boundary. Context reconstruction replaces the prefix before
     /// this entry with `[compaction, firstKeptEntryId..]` (contract §6.2).
+    ///
+    /// `first_kept_entry_id` is Option because v1 sessions carry
+    /// `firstKeptEntryIndex` (a positional number) instead; migration resolves
+    /// the index to an id. A v3 compaction always has `first_kept_entry_id =
+    /// Some(..)` and `first_kept_entry_index = None`.
     #[serde(rename = "compaction")]
     Compaction {
         #[serde(flatten)]
         base: EntryBase,
         summary: String,
-        #[serde(rename = "firstKeptEntryId")]
-        first_kept_entry_id: String,
+        #[serde(
+            rename = "firstKeptEntryId",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        first_kept_entry_id: Option<String>,
+        /// v1 legacy positional index. Captured at parse time so migration can
+        /// resolve it to `first_kept_entry_id`. Never written by pi-rs (v3).
+        #[serde(
+            rename = "firstKeptEntryIndex",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        first_kept_entry_index: Option<u64>,
         #[serde(rename = "tokensBefore")]
         tokens_before: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -223,7 +244,7 @@ mod tests {
                 tokens_before,
                 ..
             } => {
-                assert_eq!(first_kept_entry_id, "kept");
+                assert_eq!(first_kept_entry_id.as_deref(), Some("kept"));
                 assert_eq!(tokens_before, 1000);
             }
             _ => panic!("wrong variant"),
