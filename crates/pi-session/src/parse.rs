@@ -26,25 +26,33 @@ pub fn parse_session_lines<'a, I: IntoIterator<Item = &'a str>>(lines: I) -> Vec
             Ok(v) => v,
             Err(_) => continue, // skip malformed lines
         };
-        match classify(&value) {
-            Some(FileEntry::Header(h)) => out.push(FileEntry::Header(h)),
-            Some(FileEntry::Entry(e)) => out.push(FileEntry::Entry(e)),
-            None => continue, // not a session header or known entry
-        }
+        // classify returns Header, Entry, or Unknown (never None): every
+        // parseable JSON object is retained so re-save is byte-identical.
+        out.push(classify(&value));
     }
     out
 }
 
-/// Classify a parsed JSON object as a header or an entry by its `type` field.
-fn classify(value: &serde_json::Value) -> Option<FileEntry> {
-    let obj = value.as_object()?;
-    let ty = obj.get("type").and_then(|v| v.as_str())?;
-    if ty == "session" {
-        let header: SessionHeader = serde_json::from_value(value.clone()).ok()?;
-        Some(FileEntry::Header(header))
-    } else {
-        let entry: crate::entry::SessionEntry = serde_json::from_value(value.clone()).ok()?;
-        Some(FileEntry::Entry(entry))
+/// Classify a parsed JSON object as a header, a known entry, or an unknown
+/// entry. Unknown entries (unrecognized `type`, or a known `type` that fails
+/// to deserialize into the typed shape) are retained as `Unknown` with the raw
+/// map so they survive re-save. Returns `Unknown(empty)` only if the value is
+/// not a JSON object at all.
+fn classify(value: &serde_json::Value) -> FileEntry {
+    let Some(obj) = value.as_object() else {
+        return FileEntry::Unknown(serde_json::Map::new());
+    };
+    let ty = obj.get("type").and_then(|v| v.as_str());
+    match ty {
+        Some("session") => match serde_json::from_value::<SessionHeader>(value.clone()) {
+            Ok(h) => FileEntry::Header(h),
+            Err(_) => FileEntry::Unknown(obj.clone()),
+        },
+        Some(_) => match serde_json::from_value::<crate::entry::SessionEntry>(value.clone()) {
+            Ok(e) => FileEntry::Entry(e),
+            Err(_) => FileEntry::Unknown(obj.clone()),
+        },
+        None => FileEntry::Unknown(obj.clone()),
     }
 }
 
@@ -89,11 +97,28 @@ mod tests {
     }
 
     #[test]
-    fn unknown_entry_type_is_skipped_not_error() {
-        // Future entry types preserve forward-compat by skipping, not failing.
-        let contents = "{\"type\":\"session\",\"version\":3,\"id\":\"h\",\"timestamp\":\"t\",\"cwd\":\"/c\"}\n\
-            {\"type\":\"future_unknown_type\",\"id\":\"x\",\"parentId\":null,\"timestamp\":\"t\",\"weird\":42}\n";
-        let entries = parse_session_str(contents);
-        assert_eq!(entries.len(), 1, "unknown entry skipped");
+    fn unknown_entry_type_is_retained_for_resave() {
+        // Future entry types are retained as Unknown so re-save is byte-identical
+        // (the Oracle's JSON.parse keeps every line; dropping would be data loss).
+        let line = "{\"type\":\"future_unknown_type\",\"id\":\"x\",\"parentId\":null,\"timestamp\":\"t\",\"weird\":42}";
+        let contents =
+            "{\"type\":\"session\",\"version\":3,\"id\":\"h\",\"timestamp\":\"t\",\"cwd\":\"/c\"}\n"
+                .to_string()
+                + line + "\n";
+        let entries = parse_session_str(&contents);
+        assert_eq!(entries.len(), 2, "header + unknown retained");
+        match &entries[1] {
+            FileEntry::Unknown(map) => {
+                assert_eq!(
+                    map.get("type").and_then(|v| v.as_str()),
+                    Some("future_unknown_type")
+                );
+                assert_eq!(map.get("weird").and_then(|v| v.as_u64()), Some(42));
+                // Re-serialize byte-identically (preserve_order keeps key order).
+                let re = serde_json::to_string(map).unwrap();
+                assert_eq!(re, line, "unknown entry round-trips byte-identically");
+            }
+            other => panic!("expected Unknown, got {:?}", other),
+        }
     }
 }

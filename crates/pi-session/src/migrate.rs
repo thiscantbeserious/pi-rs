@@ -162,6 +162,7 @@ fn entry_to_json(entry: &FileEntry) -> Value {
     match entry {
         FileEntry::Header(h) => serde_json::to_value(h).unwrap_or(Value::Null),
         FileEntry::Entry(e) => serde_json::to_value(e).unwrap_or(Value::Null),
+        FileEntry::Unknown(map) => Value::Object(map.clone()),
     }
 }
 

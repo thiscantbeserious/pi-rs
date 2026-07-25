@@ -173,11 +173,19 @@ impl SessionEntry {
     }
 }
 
-/// A file entry: the header (first line) or any subsequent entry line.
+/// A file entry: the header (first line), a known entry, or an unknown entry
+/// whose `type` pi-rs does not recognize. Unknown entries are retained as the
+/// raw parsed map so re-save is byte-identical (the Oracle's `JSON.parse`
+/// keeps every line; dropping unknown future/extension entries would be
+/// silent data loss).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileEntry {
     Header(crate::header::SessionHeader),
     Entry(SessionEntry),
+    /// An entry whose `type` is not one of the nine known variants. The raw
+    /// map is preserved verbatim (with `serde_json` `preserve_order`, key
+    /// order is retained) so re-save reproduces the original line.
+    Unknown(serde_json::Map<String, serde_json::Value>),
 }
 
 #[cfg(test)]
@@ -194,20 +202,28 @@ mod tests {
 
     #[test]
     fn custom_entry_round_trips_with_opaque_data() {
-        // Extension data must survive byte-identical (contract §10).
-        let json = r#"{"type":"custom","id":"c1","parentId":null,"timestamp":"t","customType":"myext","data":{"any":[1,"x",true]}}"#;
+        // Extension data must survive byte-identical (contract §10). serde_json's
+        // preserve_order feature keeps insertion order so multi-key/nested
+        // objects round-trip without reordering.
+        let json = r#"{"type":"custom","id":"c1","parentId":null,"timestamp":"t","customType":"myext","data":{"any":[1,"x",true],"nested":{"z":1,"a":2},"b":3}}"#;
         let entry: SessionEntry = serde_json::from_str(json).unwrap();
         match &entry {
             SessionEntry::Custom {
                 custom_type, data, ..
             } => {
                 assert_eq!(custom_type, "myext");
-                assert_eq!(*data, Some(serde_json::json!({"any":[1,"x",true]})));
+                assert_eq!(
+                    *data,
+                    Some(serde_json::json!({"any":[1,"x",true],"nested":{"z":1,"a":2},"b":3}))
+                );
             }
             _ => panic!("wrong variant"),
         }
         let re = serde_json::to_string(&entry).unwrap();
-        assert_eq!(re, json);
+        assert_eq!(
+            re, json,
+            "multi-key/nested data round-trips byte-identically"
+        );
     }
 
     #[test]
