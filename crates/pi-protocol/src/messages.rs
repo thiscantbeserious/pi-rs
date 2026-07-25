@@ -67,6 +67,10 @@ pub struct ShutdownAck;
 
 /// A request to echo a payload back. Establishes request_id correlation
 /// (ADR 0022 Q6). Bidirectional.
+///
+/// `request_id` is `u64` on the wire but maps to TypeScript `number` (53-bit
+/// safe) via `TS_RS_LARGE_INT=number` in `.cargo/config.toml`. Senders must
+/// keep request_id below 2^53; these are monotonic counters, never large.
 #[derive(Serialize, Deserialize, ts_rs::TS, Debug, Clone, PartialEq, Eq)]
 #[ts(export)]
 pub struct EchoRequest {
@@ -75,6 +79,7 @@ pub struct EchoRequest {
 }
 
 /// The reply to an EchoRequest, carrying the same request_id. Bidirectional.
+/// See `EchoRequest` for the 53-bit constraint on request_id.
 #[derive(Serialize, Deserialize, ts_rs::TS, Debug, Clone, PartialEq, Eq)]
 #[ts(export)]
 pub struct EchoResponse {

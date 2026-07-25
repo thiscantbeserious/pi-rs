@@ -4,10 +4,10 @@ Implements ADR 0022 (the grilled design). No new design decisions. This plan exi
 
 ## Scope
 
-1. The 9 message types in `crates/pi-protocol/src/lib.rs` with `#[derive(serde::Serialize, serde::Deserialize, ts_rs::TS)]` and `#[ts(export)]`.
-2. The `Message` enum, internally tagged via `#[serde(tag = "type")]`, verbatim PascalCase variant names.
+1. The 9 message types in `crates/pi-protocol/src/messages.rs` with `#[derive(serde::Serialize, serde::Deserialize, ts_rs::TS)]` and `#[ts(export)]`.
+2. The `Message` enum with a hand-rolled serde impl producing the ADR 0022 Q5 envelope (a map with `"type"` = verbatim PascalCase variant name + the variant's fields flattened). `#[ts(tag = "type")]` controls the generated TypeScript shape; the wire serde impl is manual (see Finding below).
 3. The `ProtocolErrorCode` enum (transport-only, per ADR 0022 Q9).
-4. Length-prefix framing helpers (`read_frame`/`write_frame`) in pi-protocol: 4-byte BE u32 length + msgpack body, length counts body only.
+4. Length-prefix framing helpers (`read_frame`/`write_frame`) in pi-protocol: 4-byte BE u32 length + msgpack body, length counts body only, capped at `MAX_FRAME_SIZE` to bound allocation against a malicious peer.
 5. Core-side UDS listener (tokio `UnixListener`) + msgpack encode/decode, in pi-core.
 6. Conformance fixtures generator: Rust writes `host/protocol/fixtures.bin` as length-prefixed msgpack frames. (The Deno side that reads it lands in step 6.)
 

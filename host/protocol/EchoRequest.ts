@@ -3,5 +3,9 @@
 /**
  * A request to echo a payload back. Establishes request_id correlation
  * (ADR 0022 Q6). Bidirectional.
+ *
+ * `request_id` is `u64` on the wire but maps to TypeScript `number` (53-bit
+ * safe) via `TS_RS_LARGE_INT=number` in `.cargo/config.toml`. Senders must
+ * keep request_id below 2^53; these are monotonic counters, never large.
  */
 export type EchoRequest = { request_id: number, payload: Array<number>, };

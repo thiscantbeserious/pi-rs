@@ -7,6 +7,13 @@ use std::io;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+/// Reject any single frame body larger than this many bytes. ADR 0006 frames
+/// carry protocol messages, extension UI buffers, and tool output; 16 MiB is
+/// well above any plausible single message while bounding allocation against a
+/// malicious or buggy peer that advertises a near-4 GiB length. Without this
+/// bound, `read_frame` would allocate `vec![0u8; len]` straight off the wire.
+pub const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+
 /// Write a frame: 4-byte BE u32 length, then the body.
 pub async fn write_frame<W>(writer: &mut W, body: &[u8]) -> io::Result<()>
 where
@@ -21,6 +28,8 @@ where
 }
 
 /// Read a frame: read 4-byte BE u32 length, then read that many body bytes.
+/// Rejects a length exceeding [`MAX_FRAME_SIZE`] before allocating, so a peer
+/// cannot drive the reader into an oversized allocation.
 pub async fn read_frame<R>(reader: &mut R) -> io::Result<Vec<u8>>
 where
     R: AsyncReadExt + Unpin,
@@ -28,6 +37,12 @@ where
     let mut len_buf = [0u8; 4];
     reader.read_exact(&mut len_buf).await?;
     let len = u32::from_be_bytes(len_buf) as usize;
+    if len > MAX_FRAME_SIZE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "frame body exceeds maximum allowed size",
+        ));
+    }
     let mut body = vec![0u8; len];
     reader.read_exact(&mut body).await?;
     Ok(body)
@@ -67,5 +82,17 @@ mod tests {
         write_frame(&mut a, b"").await.unwrap();
         let got = read_frame(&mut b).await.unwrap();
         assert!(got.is_empty());
+    }
+
+    #[tokio::test]
+    async fn read_frame_rejects_oversized_length_before_allocating() {
+        // A peer advertises a length one byte over the cap. read_frame must
+        // reject it without allocating (and without waiting for the body).
+        let (mut a, mut b): (DuplexStream, DuplexStream) = tokio::io::duplex(64);
+        let oversized = (MAX_FRAME_SIZE as u32 + 1).to_be_bytes();
+        a.write_all(&oversized).await.unwrap();
+        let err = read_frame(&mut b).await.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("maximum allowed size"));
     }
 }

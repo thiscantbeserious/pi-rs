@@ -2,5 +2,6 @@
 
 /**
  * The reply to an EchoRequest, carrying the same request_id. Bidirectional.
+ * See `EchoRequest` for the 53-bit constraint on request_id.
  */
 export type EchoResponse = { request_id: number, payload: Array<number>, };
