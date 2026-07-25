@@ -5,6 +5,7 @@ members = [
   "crates/pi-protocol",
   "crates/pi-replay",
   "crates/pi-rs",
+  "crates/pi-session",
 ]
 
 [workspace.package]
@@ -19,6 +20,7 @@ authors = ["pi-rs contributors"]
 pi-core = { path = "crates/pi-core" }
 pi-protocol = { path = "crates/pi-protocol" }
 pi-replay = { path = "crates/pi-replay" }
+pi-session = { path = "crates/pi-session" }
 
 # Shared dependencies, referenced by crates as `insta.workspace = true` so
 # versions stay unified across the workspace (pitfall P16 guard starts here).

@@ -32,6 +32,7 @@ flowchart TB
     terminal["Terminal (alternate screen)"]
 
     piproto["pi-protocol crate - Host Protocol source of truth (ADR 0011)"]
+    pisession["pi-session crate - pi session format types (ADR 0008, ADR 0011 amendment)"]
 
     subgraph core["pi-rs Core - Rust binary (planned)"]
         direction TB
@@ -62,6 +63,7 @@ flowchart TB
 
     piproto -->|"codegen: Rust types"| core
     piproto -->|"codegen: TypeScript d.ts"| runtime
+    pisession -->|"session format types"| sessions
 
     diff --> terminal
     terminal --> input
