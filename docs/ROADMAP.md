@@ -43,7 +43,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 1 - Walking skeleton
 
-**Status:** 🔨 active | **Milestone:** M1 Skeleton survives kill -9
+**Status:** ✅ done | **Milestone:** M1 Skeleton survives kill -9
 
 **Objective:** retire the integration risk: the thinnest end-to-end line through Core, protocol, and host exists and survives violence, before any feature work.
 
@@ -53,14 +53,14 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [x] pi-protocol message types with ts-rs codegen [[2]](https://docs.rs/ts-rs), msgpack over UDS transport (ADR 0006)
 - [x] Host-side codec benchmark, @msgpack/msgpack [[3]](https://github.com/msgpack/msgpack-javascript) vs msgpackr [[4]](https://github.com/kriszyp/msgpackr) which claims to beat even native JSON.parse on NodeJS (pitfall P17 decides on measurements, not claims)
 - [x] Host lifecycle: boot, handshake, heartbeat (ADR 0009), restart and /reload path (ADR 0017)
-- [ ] CI Deno lane with protocol conformance tests generated from pi-protocol
+- [x] CI Deno lane with protocol conformance tests generated from pi-protocol
 
 **Exit gate 🚦**
 
 | 🎯 Gate check | Proof | Status |
 | --- | --- | --- |
-| Typed protocol round-trip: Core to host and back | Demo runnable from CI | ⬜ |
-| kill -9 the host: Core survives, prompts, respawns | Scripted chaos test | ⬜ |
+| Typed protocol round-trip: Core to host and back | Demo runnable from CI | ✅ |
+| kill -9 the host: Core survives, prompts, respawns | Scripted chaos test | ✅ |
 
 **Explicitly out:** rendering, providers, real extension API coverage, tools.
 
