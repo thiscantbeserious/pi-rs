@@ -8,6 +8,11 @@
 //! The connection triple (`ConnTriple`: upstream receiver, downstream sender,
 //! connection task handle, child process) lives in the `Ready` and `Draining`
 //! state structs (grill Q8). Transitions move or drop it.
+//!
+//! Structure: `run()` is a thin loop that calls `transition(state)` per
+//! iteration. Each transition method does the I/O for one state and returns
+//! the next state. Policy decisions (which state to go to) are extracted into
+//! pure functions with unit tests.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -23,10 +28,6 @@ use crate::host_state::{
     backoff_for_scaled, validate_handshake, ConnTriple, HostProcess, HostState,
 };
 
-/// The default heartbeat interval for production (ADR 0022 Q7: 5s).
-/// Tests override this via SupervisorConfig.heartbeat_interval.
-#[allow(dead_code)]
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 /// Consecutive missed Pongs before declaring the host hung (ADR 0022 Q7: 3).
 const MISSED_PONG_THRESHOLD: u32 = 3;
 /// Consecutive failed boots before crash-loop (ADR 0023 Q2: 5).
@@ -42,21 +43,11 @@ pub enum FailureDecision {
 
 /// Configuration for the supervisor.
 pub struct SupervisorConfig {
-    /// The UDS path to bind and pass to the host via PI_RS_HOST_SOCKET.
     pub socket_path: PathBuf,
-    /// The host binary to spawn.
     pub host_binary: PathBuf,
-    /// Args to pass to the host binary.
     pub host_args: Vec<String>,
-    /// The heartbeat interval (ADR 0022 Q7: 5s in production; shorter for
-    /// tests). The supervisor sends Heartbeat on this interval and declares
-    /// Hung after 3 consecutive missed Pongs (3 * interval).
     pub heartbeat_interval: Duration,
-    /// How long to wait for the host to connect and send a Handshake before
-    /// declaring a boot crash (30s in production; shorter for tests).
     pub boot_timeout: Duration,
-    /// The base unit for exponential backoff (1s in production; shorter for
-    /// tests). The sequence is base * [1, 2, 4, 8, 30-cap] (ADR 0023 Q2).
     pub backoff_base: Duration,
 }
 
@@ -78,91 +69,7 @@ impl HostSupervisor {
         let mut crash_count: u32 = 0;
 
         loop {
-            state = match state {
-                HostState::Stopped(_) => {
-                    let process = self.spawn_host().await?;
-                    HostState::Booting(crate::host_state::Booting { process })
-                }
-                HostState::Booting(booting) => match self.boot_phase(&listener, booting).await? {
-                    BootResult::Ready(conn) => {
-                        crash_count = 0;
-                        HostState::Ready(crate::host_state::Ready {
-                            conn,
-                            missed_pongs: 0,
-                        })
-                    }
-                    BootResult::Crash => {
-                        crash_count += 1;
-                        let backoff = backoff_for_scaled(crash_count, self.config.backoff_base);
-                        if crash_count >= CRASH_LOOP_THRESHOLD {
-                            HostState::CrashLooping(crate::host_state::CrashLooping { crash_count })
-                        } else {
-                            HostState::BackingOff(crate::host_state::BackingOff {
-                                deadline: Instant::now() + backoff,
-                                crash_count,
-                            })
-                        }
-                    }
-                },
-                HostState::Ready(ready) => match self.ready_phase(ready).await? {
-                    ReadyResult::Hung(backoff) => {
-                        HostState::Reconnecting(crate::host_state::Reconnecting {
-                            deadline: Instant::now() + backoff,
-                        })
-                    }
-                    ReadyResult::Drained => {
-                        crash_count = 0;
-                        HostState::Stopped(crate::host_state::Stopped)
-                    }
-                    ReadyResult::ConnectionLost => {
-                        HostState::Reconnecting(crate::host_state::Reconnecting {
-                            deadline: Instant::now()
-                                + backoff_for_scaled(1, self.config.backoff_base),
-                        })
-                    }
-                },
-                HostState::Hung(_hung) => {
-                    // Transient: the Core closed the socket in ready_phase
-                    // (via ConnTriple::shutdown), now move to Reconnecting.
-                    // First death auto-respawns (ADR 0023 Q6).
-                    HostState::Reconnecting(crate::host_state::Reconnecting {
-                        deadline: Instant::now() + backoff_for_scaled(1, self.config.backoff_base),
-                    })
-                }
-                HostState::Draining(drain) => {
-                    // Should not normally be reached (drain completes in
-                    // ready_phase), but handle it: the host exited during drain.
-                    let (_, conn) = drain.on_drained();
-                    conn.shutdown().await;
-                    crash_count = 0;
-                    HostState::Stopped(crate::host_state::Stopped)
-                }
-                HostState::BackingOff(bo) => {
-                    tokio::time::sleep_until(bo.deadline).await;
-                    let process = self.spawn_host().await?;
-                    HostState::Booting(crate::host_state::Booting { process })
-                }
-                HostState::Reconnecting(re) => {
-                    tokio::time::sleep_until(re.deadline).await;
-                    let process = self.spawn_host().await?;
-                    HostState::Booting(crate::host_state::Booting { process })
-                }
-                HostState::CrashLooping(cl) => {
-                    let decision = prompt_failure(cl.crash_count);
-                    match decision {
-                        FailureDecision::Restart => {
-                            crash_count = 0;
-                            let process = self.spawn_host().await?;
-                            HostState::Booting(crate::host_state::Booting { process })
-                        }
-                        FailureDecision::BypassOnce | FailureDecision::AbortTurn => {
-                            cl.on_abort();
-                            HostState::Stopped(crate::host_state::Stopped)
-                        }
-                    }
-                }
-            };
-
+            state = self.transition(state, &mut crash_count, &listener).await?;
             if matches!(state, HostState::Stopped(_)) {
                 break;
             }
@@ -170,6 +77,137 @@ impl HostSupervisor {
 
         let _ = std::fs::remove_file(&self.config.socket_path);
         Ok(())
+    }
+
+    /// Transition from one state to the next. Each arm does the I/O for that
+    /// state and returns the next state. Extracted from `run()` to keep
+    /// cognitive complexity under the Sonar limit (15).
+    async fn transition(
+        &self,
+        state: HostState,
+        crash_count: &mut u32,
+        listener: &UnixListener,
+    ) -> std::io::Result<HostState> {
+        match state {
+            HostState::Stopped(_) => self.transition_from_stopped().await,
+            HostState::Booting(booting) => {
+                self.transition_from_booting(listener, booting, crash_count)
+                    .await
+            }
+            HostState::Ready(ready) => self.transition_from_ready(ready, crash_count).await,
+            HostState::Hung(_) => Ok(self.transition_from_hung()),
+            HostState::Draining(drain) => self.transition_from_draining(drain, crash_count).await,
+            HostState::BackingOff(bo) => self.transition_from_backing_off(bo).await,
+            HostState::Reconnecting(re) => self.transition_from_reconnecting(re).await,
+            HostState::CrashLooping(cl) => {
+                self.transition_from_crash_looping(cl, crash_count).await
+            }
+        }
+    }
+
+    async fn transition_from_stopped(&self) -> std::io::Result<HostState> {
+        let process = self.spawn_host().await?;
+        Ok(HostState::Booting(crate::host_state::Booting { process }))
+    }
+
+    async fn transition_from_booting(
+        &self,
+        listener: &UnixListener,
+        booting: crate::host_state::Booting,
+        crash_count: &mut u32,
+    ) -> std::io::Result<HostState> {
+        match self.boot_phase(listener, booting).await? {
+            BootResult::Ready(conn) => {
+                *crash_count = 0;
+                Ok(HostState::Ready(crate::host_state::Ready {
+                    conn,
+                    missed_pongs: 0,
+                }))
+            }
+            BootResult::Crash => {
+                *crash_count += 1;
+                Ok(decide_boot_crash(*crash_count, self.config.backoff_base))
+            }
+        }
+    }
+
+    async fn transition_from_ready(
+        &self,
+        ready: crate::host_state::Ready,
+        crash_count: &mut u32,
+    ) -> std::io::Result<HostState> {
+        match self.ready_phase(ready).await? {
+            ReadyResult::Hung(backoff) => {
+                Ok(HostState::Reconnecting(crate::host_state::Reconnecting {
+                    deadline: Instant::now() + backoff,
+                }))
+            }
+            ReadyResult::Drained => {
+                *crash_count = 0;
+                Ok(HostState::Stopped(crate::host_state::Stopped))
+            }
+            ReadyResult::ConnectionLost => {
+                Ok(HostState::Reconnecting(crate::host_state::Reconnecting {
+                    deadline: Instant::now() + backoff_for_scaled(1, self.config.backoff_base),
+                }))
+            }
+        }
+    }
+
+    fn transition_from_hung(&self) -> HostState {
+        // Transient: the Core closed the socket in ready_phase. First death
+        // auto-respawns (ADR 0023 Q6).
+        HostState::Reconnecting(crate::host_state::Reconnecting {
+            deadline: Instant::now() + backoff_for_scaled(1, self.config.backoff_base),
+        })
+    }
+
+    async fn transition_from_draining(
+        &self,
+        drain: crate::host_state::Draining,
+        crash_count: &mut u32,
+    ) -> std::io::Result<HostState> {
+        let (_, conn) = drain.on_drained();
+        conn.shutdown().await;
+        *crash_count = 0;
+        Ok(HostState::Stopped(crate::host_state::Stopped))
+    }
+
+    async fn transition_from_backing_off(
+        &self,
+        bo: crate::host_state::BackingOff,
+    ) -> std::io::Result<HostState> {
+        tokio::time::sleep_until(bo.deadline).await;
+        let process = self.spawn_host().await?;
+        Ok(HostState::Booting(crate::host_state::Booting { process }))
+    }
+
+    async fn transition_from_reconnecting(
+        &self,
+        re: crate::host_state::Reconnecting,
+    ) -> std::io::Result<HostState> {
+        tokio::time::sleep_until(re.deadline).await;
+        let process = self.spawn_host().await?;
+        Ok(HostState::Booting(crate::host_state::Booting { process }))
+    }
+
+    async fn transition_from_crash_looping(
+        &self,
+        cl: crate::host_state::CrashLooping,
+        crash_count: &mut u32,
+    ) -> std::io::Result<HostState> {
+        let decision = prompt_failure(cl.crash_count);
+        match decision {
+            FailureDecision::Restart => {
+                *crash_count = 0;
+                let process = self.spawn_host().await?;
+                Ok(HostState::Booting(crate::host_state::Booting { process }))
+            }
+            FailureDecision::BypassOnce | FailureDecision::AbortTurn => {
+                cl.on_abort();
+                Ok(HostState::Stopped(crate::host_state::Stopped))
+            }
+        }
     }
 
     async fn spawn_host(&self) -> std::io::Result<HostProcess> {
@@ -189,71 +227,63 @@ impl HostSupervisor {
         booting: crate::host_state::Booting,
     ) -> std::io::Result<BootResult> {
         let process = booting.process;
-        // Accept the connection (with a timeout; if the host exits before
-        // connecting, the accept hangs and we time out -> Crash, not an
-        // error that exits the supervisor).
         let stream = match tokio::time::timeout(self.config.boot_timeout, listener.accept()).await {
             Ok(Ok((stream, _))) => stream,
             Ok(Err(e)) => return Err(e),
-            Err(_) => return Ok(BootResult::Crash), // accept timeout = boot crash
+            Err(_) => return Ok(BootResult::Crash),
         };
-        {
-            let (upstream_tx, mut upstream_rx) = mpsc::channel::<Message>(32);
-            let (downstream_tx, downstream_rx) = mpsc::channel::<Message>(32);
-            let conn_task = tokio::spawn(run_connection(stream, upstream_tx, downstream_rx));
 
-            // Wait for the Handshake (or a crash, or timeout).
-            let first = tokio::time::timeout(self.config.boot_timeout, upstream_rx.recv()).await;
-            let first = match first {
-                Ok(Some(msg)) => msg,
-                _ => {
+        let (upstream_tx, mut upstream_rx) = mpsc::channel::<Message>(32);
+        let (downstream_tx, downstream_rx) = mpsc::channel::<Message>(32);
+        let conn_task = tokio::spawn(run_connection(stream, upstream_tx, downstream_rx));
+
+        let first = tokio::time::timeout(self.config.boot_timeout, upstream_rx.recv()).await;
+        let first = match first {
+            Ok(Some(msg)) => msg,
+            _ => {
+                let _ = conn_task.await;
+                return Ok(BootResult::Crash);
+            }
+        };
+
+        let hs = match first {
+            Message::Handshake { inner: hs } => hs,
+            _ => {
+                send_protocol_error(
+                    &downstream_tx,
+                    ProtocolErrorCode::UnexpectedMessage,
+                    "first frame was not a Handshake",
+                )
+                .await;
+                let _ = conn_task.await;
+                return Ok(BootResult::Crash);
+            }
+        };
+
+        match validate_handshake(&hs) {
+            Ok(_ack) => {
+                if downstream_tx.send(Message::HandshakeAck).await.is_err() {
                     let _ = conn_task.await;
                     return Ok(BootResult::Crash);
                 }
-            };
-            let hs = match first {
-                Message::Handshake { inner: hs } => hs,
-                _ => {
-                    let _ = downstream_tx
-                        .send(Message::ProtocolError {
-                            inner: ProtocolError {
-                                code: ProtocolErrorCode::UnexpectedMessage,
-                                message: "first frame was not a Handshake".into(),
-                            },
-                        })
-                        .await;
-                    let _ = conn_task.await;
-                    return Ok(BootResult::Crash);
-                }
-            };
-            match validate_handshake(&hs) {
-                Ok(_ack) => {
-                    if downstream_tx.send(Message::HandshakeAck).await.is_err() {
-                        let _ = conn_task.await;
-                        return Ok(BootResult::Crash);
-                    }
-                    Ok(BootResult::Ready(ConnTriple {
-                        upstream: upstream_rx,
-                        downstream: downstream_tx,
-                        conn_task,
-                        child: process.child,
-                    }))
-                }
-                Err(rejection) => {
-                    let _ = downstream_tx
-                        .send(Message::ProtocolError {
-                            inner: ProtocolError {
-                                code: ProtocolErrorCode::HandshakeRejected,
-                                message: format!("{rejection:?}"),
-                            },
-                        })
-                        .await;
-                    let _ = conn_task.await;
-                    Ok(BootResult::Crash)
-                }
+                Ok(BootResult::Ready(ConnTriple {
+                    upstream: upstream_rx,
+                    downstream: downstream_tx,
+                    conn_task,
+                    child: process.child,
+                }))
+            }
+            Err(rejection) => {
+                send_protocol_error(
+                    &downstream_tx,
+                    ProtocolErrorCode::HandshakeRejected,
+                    &format!("{rejection:?}"),
+                )
+                .await;
+                let _ = conn_task.await;
+                Ok(BootResult::Crash)
             }
         }
-        // (The block scope ends here; process.child is free to move below.)
     }
 
     /// The ready phase: heartbeat loop + message routing. Returns when the host
@@ -264,19 +294,15 @@ impl HostSupervisor {
         mut ready: crate::host_state::Ready,
     ) -> std::io::Result<ReadyResult> {
         let mut heartbeat = interval(self.config.heartbeat_interval);
-        // The first tick fires immediately; consume it so we wait one full
-        // interval before the first heartbeat.
         heartbeat.reset();
         let _ = heartbeat.tick().await;
 
         let result = loop {
             tokio::select! {
                 _ = heartbeat.tick() => {
-                    // Send a Heartbeat downstream.
                     if ready.conn.downstream.send(Message::Heartbeat).await.is_err() {
                         break ReadyResult::ConnectionLost;
                     }
-                    // Wait for the Pong within one interval.
                     match tokio::time::timeout(self.config.heartbeat_interval, ready.conn.upstream.recv()).await {
                         Ok(Some(Message::Pong)) => ready.missed_pongs = 0,
                         Ok(Some(Message::EchoRequest { inner: req })) => {
@@ -284,7 +310,6 @@ impl HostSupervisor {
                                 request_id: req.request_id, payload: req.payload,
                             }};
                             let _ = ready.conn.downstream.send(resp).await;
-                            // Non-Pong during the pong wait: count as a miss.
                             ready.missed_pongs += 1;
                         }
                         Ok(Some(_)) => ready.missed_pongs += 1,
@@ -310,17 +335,11 @@ impl HostSupervisor {
                         None => break ReadyResult::ConnectionLost,
                     }
                 }
-                status = ready.conn.child.wait() => {
-                    let _ = status;
-                    break ReadyResult::ConnectionLost;
-                }
+                _ = ready.conn.child.wait() => break ReadyResult::ConnectionLost,
             }
         };
 
         // Tear down the connection: cancel the task, kill the child.
-        // On Hung, the host is unresponsive (won't process Shutdown); on
-        // ConnectionLost, it's already gone. On Drained, the host acked and
-        // exited, so shutdown is a no-op cleanup.
         let conn = std::mem::replace(
             &mut ready.conn,
             ConnTriple {
@@ -335,20 +354,47 @@ impl HostSupervisor {
     }
 }
 
+// --- Pure policy functions (unit-testable without I/O) ---
+
+/// Decide the next state after a boot crash. Crash count includes this crash.
+/// Returns BackingOff (crash_count < 5) or CrashLooping (crash_count >= 5).
+fn decide_boot_crash(crash_count: u32, backoff_base: Duration) -> HostState {
+    let backoff = backoff_for_scaled(crash_count, backoff_base);
+    if crash_count >= CRASH_LOOP_THRESHOLD {
+        HostState::CrashLooping(crate::host_state::CrashLooping { crash_count })
+    } else {
+        HostState::BackingOff(crate::host_state::BackingOff {
+            deadline: Instant::now() + backoff,
+            crash_count,
+        })
+    }
+}
+
+/// Send a ProtocolError downstream and await it.
+async fn send_protocol_error(
+    downstream: &mpsc::Sender<Message>,
+    code: ProtocolErrorCode,
+    message: &str,
+) {
+    let _ = downstream
+        .send(Message::ProtocolError {
+            inner: ProtocolError {
+                code,
+                message: message.into(),
+            },
+        })
+        .await;
+}
+
 enum BootResult {
     Ready(ConnTriple),
     Crash,
 }
 
 enum ReadyResult {
-    /// 3 missed Pongs. The arg is the backoff to wait before reconnecting.
     Hung(Duration),
-    /// Graceful Shutdown{drain:true} -> ShutdownAck -> Stopped.
-    /// (Wired when reload() lands; the ready_phase currently returns
-    /// ConnectionLost on drain, which is corrected in the reload step.)
     #[allow(dead_code)]
     Drained,
-    /// The connection dropped unexpectedly (not via heartbeat timeout).
     ConnectionLost,
 }
 
@@ -364,5 +410,39 @@ fn prompt_failure(crash_count: u32) -> FailureDecision {
         "r" => FailureDecision::Restart,
         "b" => FailureDecision::BypassOnce,
         _ => FailureDecision::AbortTurn,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn decide_boot_crash_under_threshold_yields_backing_off() {
+        let state = decide_boot_crash(1, Duration::from_millis(100));
+        assert!(matches!(state, HostState::BackingOff(_)));
+    }
+
+    #[test]
+    fn decide_boot_crash_at_threshold_yields_crash_looping() {
+        let state = decide_boot_crash(5, Duration::from_millis(100));
+        assert!(matches!(state, HostState::CrashLooping(_)));
+    }
+
+    #[test]
+    fn decide_boot_crash_above_threshold_yields_crash_looping() {
+        let state = decide_boot_crash(10, Duration::from_millis(100));
+        assert!(matches!(state, HostState::CrashLooping(_)));
+    }
+
+    #[test]
+    fn prompt_failure_returns_abort_on_eof() {
+        // stdin in tests is typically EOF or closed.
+        let decision = prompt_failure(5);
+        // On EOF, read_line returns 0 bytes, trim() is "", matches _ -> AbortTurn.
+        // But if stdin is a TTY this would block. In cargo test, stdin is
+        // usually /dev/null, so this should return AbortTurn.
+        assert_eq!(decision, FailureDecision::AbortTurn);
     }
 }

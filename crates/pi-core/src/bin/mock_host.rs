@@ -102,39 +102,58 @@ async fn main() -> ExitCode {
     }
 
     // Normal mode: handle messages.
+    message_loop(&mut stream).await
+}
+
+/// Handle incoming messages until the socket closes or a Shutdown is received.
+async fn message_loop(stream: &mut UnixStream) -> ExitCode {
     loop {
-        let frame = match read_frame(&mut stream).await {
+        let frame = match read_frame(stream).await {
             Ok(f) => f,
-            Err(_) => return ExitCode::SUCCESS, // socket closed
+            Err(_) => return ExitCode::SUCCESS,
         };
         let msg: Message = match rmp_serde::from_slice(&frame) {
             Ok(m) => m,
             Err(_) => continue,
         };
-        let reply = match msg {
-            Message::Heartbeat => Some(Message::Pong),
-            Message::EchoRequest { inner: req } => Some(Message::EchoResponse {
-                inner: EchoResponse {
-                    request_id: req.request_id,
-                    payload: req.payload,
-                },
-            }),
-            Message::Shutdown { inner: shutdown } => {
-                if shutdown.drain {
-                    // Graceful: ack then exit (ADR 0022 Q8).
-                    let ack = Message::ShutdownAck;
-                    let body = rmp_serde::to_vec(&ack).expect("encode ack");
-                    let _ = write_frame(&mut stream, &body).await;
-                }
-                return ExitCode::SUCCESS;
-            }
-            _ => None,
-        };
-        if let Some(reply) = reply {
-            let body = rmp_serde::to_vec(&reply).expect("encode reply");
-            if write_frame(&mut stream, &body).await.is_err() {
-                return ExitCode::from(7);
-            }
+        match handle_message(stream, msg).await {
+            HandleResult::Continue => {}
+            HandleResult::Exit(code) => return code,
         }
     }
+}
+
+/// The result of handling one message.
+enum HandleResult {
+    Continue,
+    Exit(ExitCode),
+}
+
+/// Handle one message. Returns Continue or Exit (with a code).
+async fn handle_message(stream: &mut UnixStream, msg: Message) -> HandleResult {
+    let reply = match msg {
+        Message::Heartbeat => Some(Message::Pong),
+        Message::EchoRequest { inner: req } => Some(Message::EchoResponse {
+            inner: EchoResponse {
+                request_id: req.request_id,
+                payload: req.payload,
+            },
+        }),
+        Message::Shutdown { inner: shutdown } => {
+            if shutdown.drain {
+                let ack = Message::ShutdownAck;
+                let body = rmp_serde::to_vec(&ack).expect("encode ack");
+                let _ = write_frame(stream, &body).await;
+            }
+            return HandleResult::Exit(ExitCode::SUCCESS);
+        }
+        _ => None,
+    };
+    if let Some(reply) = reply {
+        let body = rmp_serde::to_vec(&reply).expect("encode reply");
+        if write_frame(stream, &body).await.is_err() {
+            return HandleResult::Exit(ExitCode::from(7));
+        }
+    }
+    HandleResult::Continue
 }
