@@ -12,7 +12,7 @@ Known future cost: when Phase 3 imports the full pi runtime (AWS SDK, Google gen
 
 ## Q2: Restart backoff — exponential, 5 fails to prompt
 
-On a boot crash, respawn immediately the first time (transient crashes happen). On repeated crashes, back off exponentially: 1s, 2s, 4s, 8s, capped at 30s. After 5 consecutive failed boots (crash before successful handshake), stop auto-respawning and surface the native restart prompt (ADR 0009's human escape hatch). The crash count resets to 0 on a successful handshake: a crash after that is a new incident, not a continuation of a boot loop. "5 consecutive failed boots" means 5 crashes before any successful handshake, which is the actual signal of a broken host.
+On a boot crash, respawn the first time after a short backoff (1s). On repeated crashes, back off exponentially: 1s, 2s, 4s, 8s, capped at 30s. After 5 consecutive failed boots (crash before successful handshake), stop auto-respawning and surface the native restart prompt (ADR 0009's human escape hatch). The crash count resets to 0 on a successful handshake: a crash after that is a new incident, not a continuation of a boot loop. "5 consecutive failed boots" means 5 crashes before any successful handshake, which is the actual signal of a broken host.
 
 Chosen over always-auto-respawn-no-backoff (tight crash loop burns CPU, fills logs, user has no signal until terminal is unresponsive, the exact failure ADR 0009's prompt exists to prevent). Chosen over always-prompt (a single transient crash forces a human decision, too noisy for a daily-driver, and contradicts having backoff at all). Chosen over fixed-delay-no-escalation (a genuinely broken host loops forever, just slower, no human escalation path).
 

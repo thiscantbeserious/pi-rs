@@ -12,10 +12,7 @@ use pi_core::host_supervisor::{HostSupervisor, SupervisorConfig};
 
 fn mock_host_path() -> PathBuf {
     std::env::var("CARGO_BIN_EXE_mock-host")
-        .unwrap_or_else(|_| {
-            let manifest = env!("CARGO_MANIFEST_DIR");
-            format!("{manifest}/../target/debug/mock-host")
-        })
+        .expect("CARGO_BIN_EXE_mock-host must be set; run via `cargo test`")
         .into()
 }
 

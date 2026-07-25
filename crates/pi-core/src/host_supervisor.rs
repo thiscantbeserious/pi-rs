@@ -340,15 +340,8 @@ impl HostSupervisor {
         };
 
         // Tear down the connection: cancel the task, kill the child.
-        let conn = std::mem::replace(
-            &mut ready.conn,
-            ConnTriple {
-                upstream: mpsc::channel(1).1,
-                downstream: mpsc::channel(1).0,
-                conn_task: tokio::spawn(async { Ok(()) }),
-                child: Command::new("true").spawn()?,
-            },
-        );
+        // Destructure ready to move conn out without a placeholder spawn.
+        let crate::host_state::Ready { conn, .. } = ready;
         conn.shutdown().await;
         Ok(result)
     }

@@ -150,10 +150,14 @@ async fn main() -> ExitCode {
         Ok(f) => f,
         Err(_) => return ExitCode::from(5),
     };
-    let _ack: Message = match rmp_serde::from_slice(&ack_frame) {
+    let ack: Message = match rmp_serde::from_slice(&ack_frame) {
         Ok(m) => m,
         Err(_) => return ExitCode::from(6),
     };
+    // Validate the ack is actually a HandshakeAck.
+    if !matches!(ack, Message::HandshakeAck) {
+        return ExitCode::from(7);
+    }
 
     if mode == Mode::GoSilentAfterHandshake {
         tokio::time::sleep(silence_duration()).await;
