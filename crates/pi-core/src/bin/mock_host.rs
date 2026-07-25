@@ -11,15 +11,21 @@
 //!   (5 failed boots -> CrashLooping -> prompt).
 //! - `go-silent-after-handshake`: connect, handshake, then stop replying to
 //!   heartbeats. For the Hung test without kill -9.
+//! - `bad-handshake`: connect, send a Handshake with a wrong protocol_version.
+//!   Exercises the version-mismatch rejection path.
+//! - `no-handshake`: connect, send an EchoRequest as the first frame instead
+//!   of a Handshake. Exercises the unexpected-first-frame rejection path.
+//! - `echo-after-handshake`: connect, handshake, then send an EchoRequest
+//!   and wait for the EchoResponse. Exercises message routing in Ready.
 //!
 //! The socket path comes from `PI_RS_HOST_SOCKET`. Run:
-//!   mock-host [--mode normal|exit-immediately|go-silent-after-handshake]
+//!   mock-host [--mode <mode>]
 
 use std::env;
 use std::process::ExitCode;
 
 use pi_protocol::framing::{read_frame, write_frame};
-use pi_protocol::{EchoResponse, Handshake, Message, PROTOCOL_VERSION};
+use pi_protocol::{EchoRequest, EchoResponse, Handshake, Message, PROTOCOL_VERSION};
 use tokio::net::UnixStream;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +33,9 @@ enum Mode {
     Normal,
     ExitImmediately,
     GoSilentAfterHandshake,
+    BadHandshake,
+    NoHandshake,
+    EchoAfterHandshake,
 }
 
 fn parse_mode(args: &[String]) -> Mode {
@@ -37,6 +46,9 @@ fn parse_mode(args: &[String]) -> Mode {
                 return match val.as_str() {
                     "exit-immediately" => Mode::ExitImmediately,
                     "go-silent-after-handshake" => Mode::GoSilentAfterHandshake,
+                    "bad-handshake" => Mode::BadHandshake,
+                    "no-handshake" => Mode::NoHandshake,
+                    "echo-after-handshake" => Mode::EchoAfterHandshake,
                     _ => Mode::Normal,
                 };
             }
@@ -70,19 +82,45 @@ async fn main() -> ExitCode {
         }
     };
 
-    // Host speaks first: send Handshake (ADR 0022 Q2).
+    match mode {
+        Mode::BadHandshake => {
+            // Send a Handshake with a wrong protocol_version.
+            let hs = Message::Handshake {
+                inner: Handshake {
+                    protocol_version: PROTOCOL_VERSION + 1,
+                    host_pid: std::process::id(),
+                },
+            };
+            send(&mut stream, &hs).await;
+            // Wait for the supervisor to reject and close.
+            let _ = read_frame(&mut stream).await;
+            return ExitCode::SUCCESS;
+        }
+        Mode::NoHandshake => {
+            // Send an EchoRequest as the first frame (not a Handshake).
+            let req = Message::EchoRequest {
+                inner: EchoRequest {
+                    request_id: 1,
+                    payload: b"not-a-handshake".to_vec(),
+                },
+            };
+            send(&mut stream, &req).await;
+            let _ = read_frame(&mut stream).await;
+            return ExitCode::SUCCESS;
+        }
+        _ => {}
+    }
+
+    // Normal handshake.
     let hs = Message::Handshake {
         inner: Handshake {
             protocol_version: PROTOCOL_VERSION,
             host_pid: std::process::id(),
         },
     };
-    let body = rmp_serde::to_vec(&hs).expect("encode handshake");
-    if write_frame(&mut stream, &body).await.is_err() {
-        return ExitCode::from(4);
-    }
+    send(&mut stream, &hs).await;
 
-    // Wait for HandshakeAck before entering the message loop.
+    // Wait for HandshakeAck.
     let ack_frame = match read_frame(&mut stream).await {
         Ok(f) => f,
         Err(_) => return ExitCode::from(5),
@@ -91,18 +129,31 @@ async fn main() -> ExitCode {
         Ok(m) => m,
         Err(_) => return ExitCode::from(6),
     };
-    // (Real validation that it's a HandshakeAck happens in the supervisor test;
-    // the mock just needs the dance to complete.)
 
     if mode == Mode::GoSilentAfterHandshake {
-        // Stop replying. The supervisor's heartbeat will time out 3x -> Hung.
-        // Sleep forever (until killed).
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
         return ExitCode::SUCCESS;
     }
 
-    // Normal mode: handle messages.
+    if mode == Mode::EchoAfterHandshake {
+        // Send an EchoRequest, wait for the EchoResponse.
+        let req = Message::EchoRequest {
+            inner: EchoRequest {
+                request_id: 42,
+                payload: b"echo-test".to_vec(),
+            },
+        };
+        send(&mut stream, &req).await;
+        let _ = read_frame(&mut stream).await;
+        // Then enter normal message loop.
+    }
+
     message_loop(&mut stream).await
+}
+
+async fn send(stream: &mut UnixStream, msg: &Message) {
+    let body = rmp_serde::to_vec(msg).expect("encode");
+    let _ = write_frame(stream, &body).await;
 }
 
 /// Handle incoming messages until the socket closes or a Shutdown is received.
@@ -123,13 +174,11 @@ async fn message_loop(stream: &mut UnixStream) -> ExitCode {
     }
 }
 
-/// The result of handling one message.
 enum HandleResult {
     Continue,
     Exit(ExitCode),
 }
 
-/// Handle one message. Returns Continue or Exit (with a code).
 async fn handle_message(stream: &mut UnixStream, msg: Message) -> HandleResult {
     let reply = match msg {
         Message::Heartbeat => Some(Message::Pong),
@@ -142,18 +191,14 @@ async fn handle_message(stream: &mut UnixStream, msg: Message) -> HandleResult {
         Message::Shutdown { inner: shutdown } => {
             if shutdown.drain {
                 let ack = Message::ShutdownAck;
-                let body = rmp_serde::to_vec(&ack).expect("encode ack");
-                let _ = write_frame(stream, &body).await;
+                send(stream, &ack).await;
             }
             return HandleResult::Exit(ExitCode::SUCCESS);
         }
         _ => None,
     };
     if let Some(reply) = reply {
-        let body = rmp_serde::to_vec(&reply).expect("encode reply");
-        if write_frame(stream, &body).await.is_err() {
-            return HandleResult::Exit(ExitCode::from(7));
-        }
+        send(stream, &reply).await;
     }
     HandleResult::Continue
 }

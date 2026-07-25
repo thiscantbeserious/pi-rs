@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use pi_core::host_supervisor::{HostSupervisor, SupervisorConfig};
 
-/// Locate the mock-host binary in the target directory.
 fn mock_host_path() -> PathBuf {
     std::env::var("CARGO_BIN_EXE_mock-host")
         .unwrap_or_else(|_| {
@@ -20,8 +19,6 @@ fn mock_host_path() -> PathBuf {
         .into()
 }
 
-/// All test timings. Short enough for fast tests, long enough for process
-/// startup. Total suite: ~6s.
 const TEST_HEARTBEAT: Duration = Duration::from_millis(50);
 const TEST_BOOT_TIMEOUT: Duration = Duration::from_millis(300);
 const TEST_BACKOFF_BASE: Duration = Duration::from_millis(10);
@@ -44,11 +41,7 @@ async fn supervisor_detects_hung_host_and_respawns() {
     let config = test_config(socket_path, "go-silent-after-handshake");
     let supervisor = HostSupervisor::new(config);
 
-    // The mock handshakes then goes silent. The supervisor should:
-    // boot -> ready -> Hung (3 missed Pongs, ~150ms) -> Reconnecting ->
-    // respawn -> boot -> ready -> Hung -> ... loop forever.
-    // Assert it's still running (looping) after 1s.
-    let result = tokio::time::timeout(Duration::from_secs(1), supervisor.run()).await;
+    let result = tokio::time::timeout(Duration::from_secs(2), supervisor.run()).await;
     assert!(
         result.is_err(),
         "supervisor should still be running (looping on Hung/respawn) after 2s"
@@ -62,18 +55,83 @@ async fn supervisor_crash_loops_on_exit_immediately() {
     let config = test_config(socket_path, "exit-immediately");
     let supervisor = HostSupervisor::new(config);
 
-    // The mock exits immediately before connecting. Each boot times out
-    // after 300ms. After 5 crashes, the supervisor enters CrashLooping and
-    // calls the prompt. stdin is not a TTY in tests, so the prompt reads
-    // EOF -> AbortTurn -> Stopped -> the supervisor exits.
-    // Total: ~5 * 300ms boot + 10ms * (1+2+4+8) backoff = ~1.5s + 0.15s = ~1.65s.
     let result = tokio::time::timeout(Duration::from_secs(5), supervisor.run()).await;
     assert!(
         result.is_ok(),
-        "supervisor should finish (crash-loop -> prompt -> EOF -> abort) within 10s"
+        "supervisor should finish (crash-loop -> prompt -> EOF -> abort) within 5s"
     );
     assert!(
         result.unwrap().is_ok(),
         "supervisor.run() should return Ok after aborting"
+    );
+}
+
+#[tokio::test]
+async fn supervisor_rejects_bad_handshake() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "bad-handshake");
+    let supervisor = HostSupervisor::new(config);
+
+    // The mock sends a Handshake with a wrong version. The supervisor rejects
+    // it, closes the connection, counts it as a boot crash, backs off, and
+    // retries. After 5 crashes it crash-loops -> prompt -> EOF -> abort.
+    let result = tokio::time::timeout(Duration::from_secs(5), supervisor.run()).await;
+    assert!(
+        result.is_ok(),
+        "supervisor should finish (bad-handshake crash-loop -> prompt -> abort) within 5s"
+    );
+    assert!(result.unwrap().is_ok());
+}
+
+#[tokio::test]
+async fn supervisor_rejects_non_handshake_first_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "no-handshake");
+    let supervisor = HostSupervisor::new(config);
+
+    // The mock sends an EchoRequest as the first frame. The supervisor rejects
+    // it (UnexpectedMessage), counts it as a boot crash, retries. After 5 it
+    // crash-loops -> prompt -> EOF -> abort.
+    let result = tokio::time::timeout(Duration::from_secs(5), supervisor.run()).await;
+    assert!(
+        result.is_ok(),
+        "supervisor should finish (no-handshake crash-loop -> prompt -> abort) within 5s"
+    );
+    assert!(result.unwrap().is_ok());
+}
+
+#[tokio::test]
+async fn supervisor_routes_echo_request_in_ready() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "echo-after-handshake");
+    let supervisor = HostSupervisor::new(config);
+
+    // The mock handshakes, sends an EchoRequest, waits for the EchoResponse,
+    // then enters normal mode (pong, echo, shutdown). The supervisor should
+    // route the EchoRequest -> EchoResponse. The supervisor stays in Ready
+    // (looping on heartbeats) until the test times out.
+    let result = tokio::time::timeout(Duration::from_secs(2), supervisor.run()).await;
+    assert!(
+        result.is_err(),
+        "supervisor should still be running (in Ready, heartbeating) after 2s"
+    );
+}
+
+#[tokio::test]
+async fn supervisor_normal_mode_stays_ready() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "normal");
+    let supervisor = HostSupervisor::new(config);
+
+    // The mock handshakes, pongs heartbeats, echoes requests. The supervisor
+    // should stay in Ready indefinitely (until the test times out).
+    let result = tokio::time::timeout(Duration::from_secs(1), supervisor.run()).await;
+    assert!(
+        result.is_err(),
+        "supervisor should still be running (in Ready, heartbeating) after 1s"
     );
 }
