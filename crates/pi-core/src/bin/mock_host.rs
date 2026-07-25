@@ -100,40 +100,9 @@ async fn main() -> ExitCode {
         }
     };
 
-    match mode {
-        Mode::BadHandshake => {
-            // Send a Handshake with a wrong protocol_version.
-            let hs = Message::Handshake {
-                inner: Handshake {
-                    protocol_version: PROTOCOL_VERSION + 1,
-                    host_pid: std::process::id(),
-                },
-            };
-            send(&mut stream, &hs).await;
-            // Wait for the supervisor to reject and close.
-            let _ = read_frame(&mut stream).await;
-            return ExitCode::SUCCESS;
-        }
-        Mode::NoHandshake => {
-            // Send an EchoRequest as the first frame (not a Handshake).
-            let req = Message::EchoRequest {
-                inner: EchoRequest {
-                    request_id: 1,
-                    payload: b"not-a-handshake".to_vec(),
-                },
-            };
-            send(&mut stream, &req).await;
-            let _ = read_frame(&mut stream).await;
-            return ExitCode::SUCCESS;
-        }
-        _ => {}
-    }
-
-    if mode == Mode::ConnectThenSilent {
-        // Connect but never send a Handshake. The supervisor's boot timeout
-        // fires -> boot crash.
-        tokio::time::sleep(silence_duration()).await;
-        return ExitCode::SUCCESS;
+    // Handle pre-handshake misbehavior modes.
+    if let Some(code) = handle_pre_handshake_mode(mode, &mut stream).await {
+        return code;
     }
 
     // Normal handshake.
@@ -154,40 +123,81 @@ async fn main() -> ExitCode {
         Ok(m) => m,
         Err(_) => return ExitCode::from(6),
     };
-    // Validate the ack is actually a HandshakeAck.
     if !matches!(ack, Message::HandshakeAck) {
         return ExitCode::from(7);
     }
 
-    if mode == Mode::GoSilentAfterHandshake {
-        tokio::time::sleep(silence_duration()).await;
-        return ExitCode::SUCCESS;
-    }
-
-    if mode == Mode::EchoAfterHandshake {
-        // Send an EchoRequest, wait for the EchoResponse.
-        let req = Message::EchoRequest {
-            inner: EchoRequest {
-                request_id: 42,
-                payload: b"echo-test".to_vec(),
-            },
-        };
-        send(&mut stream, &req).await;
-        let _ = read_frame(&mut stream).await;
-        // Then enter normal message loop.
-    }
-
-    if mode == Mode::ExitAfterHandshake {
-        // Pong once then exit. Exercises ConnectionLost -> Reconnecting.
-        if let Ok(frame) = read_frame(&mut stream).await {
-            if let Ok(Message::Heartbeat) = rmp_serde::from_slice(&frame) {
-                send(&mut stream, &Message::Pong).await;
-            }
-        }
-        return ExitCode::SUCCESS;
+    // Handle post-handshake misbehavior modes.
+    if let Some(code) = handle_post_handshake_mode(mode, &mut stream).await {
+        return code;
     }
 
     message_loop(&mut stream).await
+}
+
+/// Handle modes that exit before the normal handshake. Returns Some(ExitCode)
+/// if the mode was handled, None if the flow should continue to handshake.
+async fn handle_pre_handshake_mode(mode: Mode, stream: &mut UnixStream) -> Option<ExitCode> {
+    match mode {
+        Mode::BadHandshake => {
+            let hs = Message::Handshake {
+                inner: Handshake {
+                    protocol_version: PROTOCOL_VERSION + 1,
+                    host_pid: std::process::id(),
+                },
+            };
+            send(stream, &hs).await;
+            let _ = read_frame(stream).await;
+            Some(ExitCode::SUCCESS)
+        }
+        Mode::NoHandshake => {
+            let req = Message::EchoRequest {
+                inner: EchoRequest {
+                    request_id: 1,
+                    payload: b"not-a-handshake".to_vec(),
+                },
+            };
+            send(stream, &req).await;
+            let _ = read_frame(stream).await;
+            Some(ExitCode::SUCCESS)
+        }
+        Mode::ConnectThenSilent => {
+            tokio::time::sleep(silence_duration()).await;
+            Some(ExitCode::SUCCESS)
+        }
+        _ => None,
+    }
+}
+
+/// Handle modes that exit after a successful handshake. Returns Some(ExitCode)
+/// if the mode was handled, None if the flow should continue to message_loop.
+async fn handle_post_handshake_mode(mode: Mode, stream: &mut UnixStream) -> Option<ExitCode> {
+    match mode {
+        Mode::GoSilentAfterHandshake => {
+            tokio::time::sleep(silence_duration()).await;
+            Some(ExitCode::SUCCESS)
+        }
+        Mode::EchoAfterHandshake => {
+            let req = Message::EchoRequest {
+                inner: EchoRequest {
+                    request_id: 42,
+                    payload: b"echo-test".to_vec(),
+                },
+            };
+            send(stream, &req).await;
+            let _ = read_frame(stream).await;
+            None
+        }
+        Mode::ExitAfterHandshake => {
+            if let Ok(frame) = read_frame(stream).await {
+                if let Ok(Message::Heartbeat) = rmp_serde::from_slice(&frame) {
+                    send(stream, &Message::Pong).await;
+                }
+            }
+            Some(ExitCode::SUCCESS)
+        }
+        _ => None,
+    }
 }
 
 async fn send(stream: &mut UnixStream, msg: &Message) {
