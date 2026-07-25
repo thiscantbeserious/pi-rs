@@ -14,11 +14,19 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// bound, `read_frame` would allocate `vec![0u8; len]` straight off the wire.
 pub const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
-/// Write a frame: 4-byte BE u32 length, then the body.
+/// Write a frame: 4-byte BE u32 length, then the body. Rejects a body
+/// exceeding [`MAX_FRAME_SIZE`] so a caller cannot emit a frame its peer
+/// will reject on read (symmetric bound with [`read_frame`]).
 pub async fn write_frame<W>(writer: &mut W, body: &[u8]) -> io::Result<()>
 where
     W: AsyncWriteExt + Unpin,
 {
+    if body.len() > MAX_FRAME_SIZE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "frame body exceeds maximum allowed size",
+        ));
+    }
     let len = u32::try_from(body.len()).map_err(|_| {
         io::Error::new(io::ErrorKind::InvalidInput, "frame body exceeds u32 length")
     })?;
@@ -93,6 +101,16 @@ mod tests {
         a.write_all(&oversized).await.unwrap();
         let err = read_frame(&mut b).await.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("maximum allowed size"));
+    }
+
+    #[tokio::test]
+    async fn write_frame_rejects_an_oversized_body() {
+        // Symmetric bound: a caller cannot emit a frame its peer will reject.
+        let (mut a, _b): (DuplexStream, DuplexStream) = tokio::io::duplex(64);
+        let oversized = vec![0u8; MAX_FRAME_SIZE + 1];
+        let err = write_frame(&mut a, &oversized).await.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
         assert!(err.to_string().contains("maximum allowed size"));
     }
 }

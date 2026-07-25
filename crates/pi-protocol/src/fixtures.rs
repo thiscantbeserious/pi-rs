@@ -47,6 +47,22 @@ fn fixture_messages() -> Vec<Message> {
                 payload: b"hello".to_vec(),
             },
         },
+        // Boundary fixture: 2^53 - 1 is the largest integer JavaScript's
+        // number type represents exactly. request_id is u64 on the wire but
+        // maps to TS number (TS_RS_LARGE_INT=number). Senders must keep it
+        // at or below this value; this fixture proves the boundary round-trips.
+        Message::EchoRequest {
+            inner: EchoRequest {
+                request_id: 9_007_199_254_740_991,
+                payload: b"max-safe".to_vec(),
+            },
+        },
+        Message::EchoResponse {
+            inner: EchoResponse {
+                request_id: 9_007_199_254_740_991,
+                payload: b"max-safe".to_vec(),
+            },
+        },
         Message::ProtocolError {
             inner: ProtocolError {
                 code: ProtocolErrorCode::UnknownMessageType,
@@ -128,7 +144,9 @@ mod tests {
     #[tokio::test]
     async fn fixtures_decode_back_to_the_original_messages() {
         // The fixtures must round-trip: each frame decodes to the Message that
-        // produced it. This is the assertion the Deno side (step 6) mirrors.
+        // produced it, and re-encoding the decoded message yields the same
+        // bytes (byte-identity, ADR 0022 Q10 dual assertion). This is the
+        // assertion the Deno side (step 6) mirrors.
         let bytes = encode_fixtures();
         let mut reader = &bytes[..];
         let original = fixture_messages();
@@ -136,6 +154,13 @@ mod tests {
             let frame = read_frame(&mut reader).await.expect("read a frame");
             let got: Message = rmp_serde::from_slice(&frame).expect("decode a message");
             assert_eq!(got, *expected, "fixture did not round-trip");
+            // Byte-identity: a serializer change that preserves values but
+            // alters the wire representation is caught here.
+            let reencoded = rmp_serde::to_vec(&got).expect("re-encode the message");
+            assert_eq!(
+                reencoded, frame,
+                "re-encoding produced different bytes than the fixture"
+            );
         }
         // No trailing bytes: every frame was consumed.
         let mut tail = [0u8; 1];
