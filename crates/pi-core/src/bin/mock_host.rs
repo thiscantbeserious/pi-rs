@@ -17,6 +17,10 @@
 //!   of a Handshake. Exercises the unexpected-first-frame rejection path.
 //! - `echo-after-handshake`: connect, handshake, then send an EchoRequest
 //!   and wait for the EchoResponse. Exercises message routing in Ready.
+//! - `exit-after-handshake`: connect, handshake, pong once, then exit.
+//!   Exercises the ConnectionLost -> Reconnecting -> Booting loop.
+//! - `connect-then-silent`: connect but never send a Handshake. Exercises
+//!   the boot timeout path.
 //!
 //! The socket path comes from `PI_RS_HOST_SOCKET`. Run:
 //!   mock-host [--mode <mode>]
@@ -36,6 +40,8 @@ enum Mode {
     BadHandshake,
     NoHandshake,
     EchoAfterHandshake,
+    ExitAfterHandshake,
+    ConnectThenSilent,
 }
 
 fn parse_mode(args: &[String]) -> Mode {
@@ -49,12 +55,24 @@ fn parse_mode(args: &[String]) -> Mode {
                     "bad-handshake" => Mode::BadHandshake,
                     "no-handshake" => Mode::NoHandshake,
                     "echo-after-handshake" => Mode::EchoAfterHandshake,
+                    "exit-after-handshake" => Mode::ExitAfterHandshake,
+                    "connect-then-silent" => Mode::ConnectThenSilent,
                     _ => Mode::Normal,
                 };
             }
         }
     }
     Mode::Normal
+}
+
+/// How long to sleep in "silent" modes (go-silent, connect-then-silent).
+/// Defaults to 1 hour; tests override via MOCK_HOST_SILENCE_SECS.
+fn silence_duration() -> std::time::Duration {
+    let secs = env::var("MOCK_HOST_SILENCE_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3600);
+    std::time::Duration::from_secs(secs)
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -111,6 +129,13 @@ async fn main() -> ExitCode {
         _ => {}
     }
 
+    if mode == Mode::ConnectThenSilent {
+        // Connect but never send a Handshake. The supervisor's boot timeout
+        // fires -> boot crash.
+        tokio::time::sleep(silence_duration()).await;
+        return ExitCode::SUCCESS;
+    }
+
     // Normal handshake.
     let hs = Message::Handshake {
         inner: Handshake {
@@ -131,7 +156,7 @@ async fn main() -> ExitCode {
     };
 
     if mode == Mode::GoSilentAfterHandshake {
-        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+        tokio::time::sleep(silence_duration()).await;
         return ExitCode::SUCCESS;
     }
 
@@ -146,6 +171,16 @@ async fn main() -> ExitCode {
         send(&mut stream, &req).await;
         let _ = read_frame(&mut stream).await;
         // Then enter normal message loop.
+    }
+
+    if mode == Mode::ExitAfterHandshake {
+        // Pong once then exit. Exercises ConnectionLost -> Reconnecting.
+        if let Ok(frame) = read_frame(&mut stream).await {
+            if let Ok(Message::Heartbeat) = rmp_serde::from_slice(&frame) {
+                send(&mut stream, &Message::Pong).await;
+            }
+        }
+        return ExitCode::SUCCESS;
     }
 
     message_loop(&mut stream).await

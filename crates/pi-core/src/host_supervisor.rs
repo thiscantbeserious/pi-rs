@@ -241,7 +241,7 @@ impl HostSupervisor {
         let first = match first {
             Ok(Some(msg)) => msg,
             _ => {
-                let _ = conn_task.await;
+                kill_boot_child(process.child, conn_task).await;
                 return Ok(BootResult::Crash);
             }
         };
@@ -255,7 +255,7 @@ impl HostSupervisor {
                     "first frame was not a Handshake",
                 )
                 .await;
-                let _ = conn_task.await;
+                kill_boot_child(process.child, conn_task).await;
                 return Ok(BootResult::Crash);
             }
         };
@@ -263,7 +263,7 @@ impl HostSupervisor {
         match validate_handshake(&hs) {
             Ok(_ack) => {
                 if downstream_tx.send(Message::HandshakeAck).await.is_err() {
-                    let _ = conn_task.await;
+                    kill_boot_child(process.child, conn_task).await;
                     return Ok(BootResult::Crash);
                 }
                 Ok(BootResult::Ready(ConnTriple {
@@ -280,7 +280,7 @@ impl HostSupervisor {
                     &format!("{rejection:?}"),
                 )
                 .await;
-                let _ = conn_task.await;
+                kill_boot_child(process.child, conn_task).await;
                 Ok(BootResult::Crash)
             }
         }
@@ -389,6 +389,19 @@ async fn send_protocol_error(
 enum BootResult {
     Ready(ConnTriple),
     Crash,
+}
+
+/// Kill the child process and clean up the connection task on a boot crash.
+/// Without this, a mock that connects but never handshakes stays alive,
+/// holding the socket and blocking the next respawn.
+async fn kill_boot_child(
+    mut child: tokio::process::Child,
+    conn_task: tokio::task::JoinHandle<std::io::Result<()>>,
+) {
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+    conn_task.abort();
+    let _ = conn_task.await;
 }
 
 enum ReadyResult {

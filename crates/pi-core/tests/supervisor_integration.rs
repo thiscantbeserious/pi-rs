@@ -24,6 +24,8 @@ const TEST_BOOT_TIMEOUT: Duration = Duration::from_millis(300);
 const TEST_BACKOFF_BASE: Duration = Duration::from_millis(10);
 
 fn test_config(socket_path: PathBuf, mode: &str) -> SupervisorConfig {
+    // Keep silent-mode mock hosts from sleeping for an hour.
+    std::env::set_var("MOCK_HOST_SILENCE_SECS", "5");
     SupervisorConfig {
         socket_path,
         host_binary: mock_host_path(),
@@ -127,11 +129,44 @@ async fn supervisor_normal_mode_stays_ready() {
     let config = test_config(socket_path, "normal");
     let supervisor = HostSupervisor::new(config);
 
-    // The mock handshakes, pongs heartbeats, echoes requests. The supervisor
-    // should stay in Ready indefinitely (until the test times out).
     let result = tokio::time::timeout(Duration::from_secs(1), supervisor.run()).await;
     assert!(
         result.is_err(),
         "supervisor should still be running (in Ready, heartbeating) after 1s"
     );
+}
+
+#[tokio::test]
+async fn supervisor_reconnects_after_host_exits() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "exit-after-handshake");
+    let supervisor = HostSupervisor::new(config);
+
+    // The mock handshakes, pongs once, then exits. The supervisor detects
+    // ConnectionLost -> Reconnecting -> backoff -> respawn -> boot ->...
+    // It loops forever (each mock exits after one pong). Assert it's still
+    // running after 2s (gone through Reconnecting at least once).
+    let result = tokio::time::timeout(Duration::from_secs(2), supervisor.run()).await;
+    assert!(
+        result.is_err(),
+        "supervisor should still be running (looping on ConnectionLost/Reconnecting) after 2s"
+    );
+}
+
+#[tokio::test]
+async fn supervisor_times_out_on_connect_then_silent() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "connect-then-silent");
+    let supervisor = HostSupervisor::new(config);
+
+    // The mock connects but never sends a Handshake. The supervisor's boot
+    // timeout fires -> boot crash. After 5 crashes -> crash-loop -> abort.
+    let result = tokio::time::timeout(Duration::from_secs(10), supervisor.run()).await;
+    assert!(
+        result.is_ok(),
+        "supervisor should finish (connect-then-silent crash-loop -> abort) within 10s"
+    );
+    assert!(result.unwrap().is_ok());
 }
