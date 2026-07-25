@@ -35,6 +35,12 @@ The codec stays behind the `Codec` interface in `host/codec.ts` so a future swap
 
 V8's `JSON.parse` is heavily optimized. Msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size - which holds. Codec stays behind an interface (pitfall P17).
 
+## Deno compile for the host binary - ADR 0021, Phase 1 step 5 ✅ verified
+
+`deno compile` produces a standalone binary from the Phase 1 host entrypoint (codec + framing + protocol types, no full pi runtime yet). Verified: compiles clean, runs standalone, encodes a Heartbeat in 16 bytes. The Core spawns this binary with `PI_RS_HOST_SOCKET` in env, making the Deno dependency build-time (cannot be forgotten at deploy, unlike `deno run` relying on `$PATH`).
+
+Known future cost: when Phase 3 imports the full pi runtime (AWS SDK, Google genai, OpenAI, Anthropic, MCP SDK), the compile step and binary size will grow dramatically. Re-evaluate at Phase 3 against ADR 0014/0020's distribution story. ([deno compile docs](https://docs.deno.com/runtime/reference/cli/compile/))
+
 ## Deno per-extension sandboxing - ADR 0002 ✅ path verified, re-timed
 
 Deno permissions are per-process, but Workers accept scoped permissions (`WorkerOptions.deno.permissions`: inherit/none/specific paths+hosts, never exceeding the parent). Per-extension sandboxing = one worker per extension - possible, but adds worker-context compat risk, so it is post-parity. The v1 host runs process-level union permissions (still stronger than VS Code, which research confirms runs all extensions unsandboxed with full system access in one process). ([WorkerOptions.deno](https://docs.deno.com/api/web/~/WorkerOptions.deno), [VS Code ext security](https://safeguard.sh/resources/blog/vscode-extension-security-development-guide))

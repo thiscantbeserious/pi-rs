@@ -4,6 +4,9 @@
 //! decisions. The agent loop lives here but must not depend on the renderer
 //! (ADR 0011, ADR 0018 headless constraint).
 
+pub mod host_connection;
+pub mod host_state;
+pub mod host_supervisor;
 pub mod host_transport;
 
 /// Returns the crate version (workspace package version).

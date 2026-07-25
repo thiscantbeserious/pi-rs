@@ -212,8 +212,13 @@ jobs:
         if: steps.cache-tarpaulin.outputs.cache-hit != 'true'
         run: cargo install cargo-tarpaulin --version ${{ env.TARPAULIN_VERSION }}
 
+      - name: Build mock-host binary (test fixture for integration tests)
+        run: cargo build --bin mock-host
+
       - name: Generate coverage
-        run: cargo tarpaulin --out xml --output-dir coverage --workspace --lib
+        env:
+          CARGO_BIN_EXE_mock-host: ${{ github.workspace }}/target/debug/mock-host
+        run: cargo tarpaulin --out xml --output-dir coverage --workspace
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
@@ -285,7 +290,7 @@ jobs:
         run: cargo install cargo-insta --version ${{ env.CARGO_INSTA_VERSION }}
 
       - name: Run snapshot tests
-        run: cargo insta test --check --workspace
+        run: cargo insta test --check --lib --workspace
 
   # Lint - fast-fail for style issues
   lint:
