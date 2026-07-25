@@ -21,9 +21,19 @@ Working default: **ts-rs** for its simplicity - pi-protocol only needs message/D
 
 Working default: static compilation via per-language grammar crates with Cargo features (agr-style simplicity, no runtime loading). Revisit toward the Zed WASM model only if grammar count/binary size becomes a problem.
 
-## MessagePack in JS - ADR 0006, claim refined
+## MessagePack in JS - ADR 0006, benchmarked (Phase 1 step 4)
 
-V8's `JSON.parse` is heavily optimized. Msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size - which holds. Benchmark `@msgpack/msgpack` vs `msgpackr` at protocol bring-up. Codec stays behind an interface (pitfall P17).
+Benchmarked `@msgpack/msgpack` 3.1.3 vs `msgpackr` 2.0.4 on the actual Phase 1 protocol payload mix (small control messages + a 1 MiB binary tool-output payload), Deno 2.9.4, 200 warmup + 2000 iterations (50 for the 1 MiB payload), synchronous codec operations (both libs are sync; async wrappers were removed because their per-call Promise overhead diluted the small-message differences the benchmark exists to measure).
+
+**Decision: the host codec is `@msgpack/msgpack` (ADR 0006 default).** The codec-swap trigger did not fire.
+
+Geomean combined encode+decode ratio (`@msgpack/msgpack` / `msgpackr`) measured consistently in the **1.7x-1.8x range across runs**, under the 2x trigger threshold. The benchmark has run-to-run variance (JIT, GC, system load) high enough that exact per-payload numbers are not stable between runs; the geomean is consistently under 2x across multiple runs, which is what the decision rests on.
+
+Observed per-run pattern: msgpackr is faster on small messages by ~1.3x-2.7x (varies by run). The 1 MiB binary decode case is the most volatile: msgpackr's native-acceleration decode path sometimes beats `@msgpack/msgpack` by ~2.9x, sometimes `@msgpack/msgpack` wins. This refines P17: the msgpack win is binary-safety and payload size, but msgpackr's native acceleration makes the large-binary-decode case volatile and closest to the 2x threshold. Re-benchmark if the protocol payload mix shifts toward large binary frames.
+
+The codec stays behind the `Codec` interface in `host/codec.ts` so a future swap is one line, not a protocol change. Full methodology and the decision threshold live in `docs/plans/step-4-host-codec-benchmark.md`; the benchmark is `host/codec_bench.ts`.
+
+V8's `JSON.parse` is heavily optimized. Msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size - which holds. Codec stays behind an interface (pitfall P17).
 
 ## Deno per-extension sandboxing - ADR 0002 ✅ path verified, re-timed
 
