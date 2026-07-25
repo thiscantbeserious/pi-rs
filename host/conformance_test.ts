@@ -20,97 +20,111 @@ const FIXTURES_BYTES = Deno.readFileSync(FIXTURES_PATH);
 // generated TS type (ts-rs maps Vec<u8> to Array<number>). The msgpack codec
 // decodes bin as Uint8Array; normalize() converts for comparison.
 const EXPECTED: Record<string, unknown>[] = [
-  { type: "Handshake", protocol_version: 1, host_pid: 1234 },
-  { type: "HandshakeAck" },
-  { type: "Heartbeat" },
-  { type: "Pong" },
-  { type: "Shutdown", drain: true },
-  { type: "Shutdown", drain: false },
-  { type: "ShutdownAck" },
-  { type: "EchoRequest", request_id: 42, payload: [104, 101, 108, 108, 111] },
-  { type: "EchoResponse", request_id: 42, payload: [104, 101, 108, 108, 111] },
-  { type: "EchoRequest", request_id: 9_007_199_254_740_991, payload: [109, 97, 120, 45, 115, 97, 102, 101] },
-  { type: "EchoResponse", request_id: 9_007_199_254_740_991, payload: [109, 97, 120, 45, 115, 97, 102, 101] },
-  { type: "ProtocolError", code: "UnknownMessageType", message: "unknown" },
-  { type: "ProtocolError", code: "MalformedFrame", message: "bad frame" },
-  { type: "ProtocolError", code: "UnexpectedMessage", message: "unexpected" },
-  { type: "ProtocolError", code: "HandshakeRejected", message: "rejected" },
+	{ type: "Handshake", protocol_version: 1, host_pid: 1234 },
+	{ type: "HandshakeAck" },
+	{ type: "Heartbeat" },
+	{ type: "Pong" },
+	{ type: "Shutdown", drain: true },
+	{ type: "Shutdown", drain: false },
+	{ type: "ShutdownAck" },
+	{ type: "EchoRequest", request_id: 42, payload: [104, 101, 108, 108, 111] },
+	{ type: "EchoResponse", request_id: 42, payload: [104, 101, 108, 108, 111] },
+	{
+		type: "EchoRequest",
+		request_id: 9_007_199_254_740_991,
+		payload: [109, 97, 120, 45, 115, 97, 102, 101],
+	},
+	{
+		type: "EchoResponse",
+		request_id: 9_007_199_254_740_991,
+		payload: [109, 97, 120, 45, 115, 97, 102, 101],
+	},
+	{ type: "ProtocolError", code: "UnknownMessageType", message: "unknown" },
+	{ type: "ProtocolError", code: "MalformedFrame", message: "bad frame" },
+	{ type: "ProtocolError", code: "UnexpectedMessage", message: "unexpected" },
+	{ type: "ProtocolError", code: "HandshakeRejected", message: "rejected" },
 ];
 
 // Normalize binary payloads for comparison: msgpackr decodes binary as Node
 // Buffer, @msgpack/msgpack as Uint8Array. Compare by byte content.
 function normalize(value: unknown): unknown {
-  if (value instanceof Uint8Array) {
-    return Array.from(value);
-  }
-  if (typeof Buffer !== "undefined" && value instanceof Buffer) {
-    return Array.from(new Uint8Array(value));
-  }
-  if (value && typeof value === "object") {
-    if (Array.isArray(value)) return value.map(normalize);
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = normalize(v);
-    }
-    return out;
-  }
-  return value;
+	if (value instanceof Uint8Array) {
+		return Array.from(value);
+	}
+	if (typeof Buffer !== "undefined" && value instanceof Buffer) {
+		return Array.from(new Uint8Array(value));
+	}
+	if (value && typeof value === "object") {
+		if (Array.isArray(value)) return value.map(normalize);
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+			out[k] = normalize(v);
+		}
+		return out;
+	}
+	return value;
 }
 
 // Read a length-prefixed frame from a byte buffer at the given offset.
 // Returns [decodedMessage, rawFrameBytes, nextOffset].
 function readFrame(
-  bytes: Uint8Array,
-  offset: number,
+	bytes: Uint8Array,
+	offset: number,
 ): [unknown, Uint8Array, number] | null {
-  if (offset + 4 > bytes.length) return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 4);
-  const len = view.getUint32(0);
-  const frameStart = offset + 4;
-  const frameEnd = frameStart + len;
-  if (frameEnd > bytes.length) return null;
-  const frameBytes = bytes.slice(frameStart, frameEnd);
-  const decoded = msgpackCodec.decode(frameBytes);
-  return [decoded, frameBytes, frameEnd];
+	if (offset + 4 > bytes.length) return null;
+	const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 4);
+	const len = view.getUint32(0);
+	const frameStart = offset + 4;
+	const frameEnd = frameStart + len;
+	if (frameEnd > bytes.length) return null;
+	const frameBytes = bytes.slice(frameStart, frameEnd);
+	const decoded = msgpackCodec.decode(frameBytes);
+	return [decoded, frameBytes, frameEnd];
 }
 
 Deno.test("fixtures.bin decodes to the expected messages in order", () => {
-  let offset = 0;
-  for (let i = 0; i < EXPECTED.length; i++) {
-    const result = readFrame(FIXTURES_BYTES, offset);
-    if (!result) {
-      throw new Error(`frame ${i}: unexpected end of fixtures.bin at offset ${offset}`);
-    }
-    const [decoded, _raw, nextOffset] = result;
-    offset = nextOffset;
-    assertEquals(
-      normalize(decoded),
-      normalize(EXPECTED[i]),
-      `frame ${i}: decoded shape does not match expected`,
-    );
-  }
-  // No trailing bytes after the last frame.
-  assertEquals(offset, FIXTURES_BYTES.length, "fixtures.bin has trailing bytes after the last frame");
+	let offset = 0;
+	for (let i = 0; i < EXPECTED.length; i++) {
+		const result = readFrame(FIXTURES_BYTES, offset);
+		if (!result) {
+			throw new Error(
+				`frame ${i}: unexpected end of fixtures.bin at offset ${offset}`,
+			);
+		}
+		const [decoded, _raw, nextOffset] = result;
+		offset = nextOffset;
+		assertEquals(
+			normalize(decoded),
+			normalize(EXPECTED[i]),
+			`frame ${i}: decoded shape does not match expected`,
+		);
+	}
+	// No trailing bytes after the last frame.
+	assertEquals(
+		offset,
+		FIXTURES_BYTES.length,
+		"fixtures.bin has trailing bytes after the last frame",
+	);
 });
 
 Deno.test("each frame re-encodes to byte-identical bytes (codec round-trip)", () => {
-  let offset = 0;
-  let frameIndex = 0;
-  while (offset < FIXTURES_BYTES.length) {
-    const result = readFrame(FIXTURES_BYTES, offset);
-    if (!result) break;
-    const [decoded, rawFrame, nextOffset] = result;
-    offset = nextOffset;
+	let offset = 0;
+	let frameIndex = 0;
+	while (offset < FIXTURES_BYTES.length) {
+		const result = readFrame(FIXTURES_BYTES, offset);
+		if (!result) break;
+		const [decoded, rawFrame, nextOffset] = result;
+		offset = nextOffset;
 
-    // Re-encode the decoded message.
-    const reencoded = msgpackCodec.encode(decoded);
+		// Re-encode the decoded message.
+		const reencoded = msgpackCodec.encode(decoded);
 
-    // The re-encoded bytes must match the original frame bytes exactly.
-    assertEquals(
-      Array.from(reencoded),
-      Array.from(rawFrame),
-      `frame ${frameIndex}: re-encoding produced different bytes than the fixture`,
-    );
-    frameIndex++;
-  }
+		// The re-encoded bytes must match the original frame bytes exactly.
+		assertEquals(
+			Array.from(reencoded),
+			Array.from(rawFrame),
+			`frame ${frameIndex}: re-encoding produced different bytes than the fixture`,
+		);
+		frameIndex++;
+	}
 });
