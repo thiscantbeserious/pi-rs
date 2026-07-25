@@ -216,6 +216,8 @@ jobs:
         run: cargo build --bin mock-host
 
       - name: Generate coverage
+        env:
+          CARGO_BIN_EXE_mock-host: ${{ github.workspace }}/target/debug/mock-host
         run: cargo tarpaulin --out xml --output-dir coverage --workspace
 
       - name: Upload to Codecov
