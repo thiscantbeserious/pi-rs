@@ -10,13 +10,36 @@ description = "pi-rs Core: TUI, renderer, agent loop"
 name = "pi_core"
 path = "src/lib.rs"
 
+[[bin]]
+name = "mock-host"
+path = "src/bin/mock_host.rs"
+harness = false
+test = false
+bench = false
+
 [dependencies]
 pi-protocol.workspace = true
-tokio = { version = "1", features = ["net", "io-util", "rt", "process", "time", "sync", "macros"] }
+tokio = { version = "1", features = [
+  "net",
+  "io-util",
+  "rt",
+  "process",
+  "time",
+  "sync",
+  "macros",
+] }
 rmp-serde = "1"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 insta.workspace = true
-tokio = { version = "1", features = ["net", "io-util", "macros", "rt", "process", "time", "sync"] }
+tokio = { version = "1", features = [
+  "net",
+  "io-util",
+  "macros",
+  "rt",
+  "process",
+  "time",
+  "sync",
+] }
 tempfile = "3"

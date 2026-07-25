@@ -30,9 +30,9 @@ Phase 3 swaps the stdin read for the TUI prompt without changing the `FailureDec
 
 - `Stopped` — no host process, no pending action. Initial and terminal-after-graceful-shutdown.
 - `Booting` — Core spawned the host, waiting for `Handshake`. A crash here is a "failed boot" (Q2's crash count increments).
-- `Ready` — handshake accepted, `HandshakeAck` sent. Host is live and exchanging messages.
+- `Ready` — handshake accepted, `HandshakeAck` sent. Host is live and exchanging messages. Holds a `ConnTriple` (the upstream channel receiver, the downstream channel sender, the connection task handle, and the child process) plus the miss count. The supervisor owns the heartbeat timer and sends `Heartbeat` downstream on the interval (supersedes the original Q5 wording; see Q5 below).
 - `Hung` — 3 consecutive missed `Pong`s (ADR 0009, ADR 0022 Q7). Transient: the Core closes the socket and moves to `Reconnecting`. Kept as a named state for log clarity ("declared hung at T, closing socket") even though it immediately transitions.
-- `Draining` — Core sent `Shutdown{drain:true}` (for `/reload`), waiting for `ShutdownAck` or host exit.
+- `Draining` — Core sent `Shutdown{drain:true}` (for `/reload`), waiting for `ShutdownAck` or host exit. Holds the `ConnTriple` so the supervisor can keep reading the `ShutdownAck` and detect host exit.
 - `BackingOff` — a boot crash occurred (crash count < 5); wait the backoff timer, then respawn. Distinct from `Stopped` so the pending timer is explicit state, not hidden.
 - `Reconnecting` — the host died at runtime (via `Hung`); wait the backoff timer, then respawn. Distinct from `BackingOff` because the *reason* differs (runtime death vs boot failure), which matters for logging, metrics, and debugging. The timer logic is shared; the semantic is not.
 - `CrashLooping` — 5 consecutive failed boots; supervisor gave up auto-respawn, surfacing the native prompt.
@@ -54,11 +54,13 @@ Transitions:
 
 Chosen over folding `BackingOff` into `Stopped` (hidden state: `Stopped` would sometimes have a pending timer and sometimes not, the kind of conflation the parse-don't-validate rule warns against). Chosen over a separate `Reconnecting` only when it adds speculative precision: it does, because the post-`Hung` and post-boot-crash paths tell different stories even with shared timer logic.
 
-## Q5: Concurrency — supervisor task owns state, connection tasks do I/O
+## Q5: Concurrency — supervisor task owns state and heartbeat, connection tasks do I/O
 
-A supervisor task owns the state machine (state, crash count, backoff timer) and spawns connection tasks. A connection task does the socket I/O and heartbeat writes via `tokio::select!` over the heartbeat interval and socket reads, and reports events upstream via a channel: `HandshakeReceived`, `PongReceived`, `PongTimedOut`, `ConnectionClosed`. The supervisor is the single writer of lifecycle state; connection tasks are ephemeral (killed on `Hung`/respawn).
+A supervisor task owns the state machine (state, crash count, backoff timer) and spawns connection tasks. A connection task is pure dumb I/O: read a frame and send it upstream; receive a downstream message and write it. No heartbeat timer, no miss count, no logic — ~15 lines of `select!` over the socket read and the downstream channel. The supervisor is the single writer of lifecycle state; connection tasks are ephemeral (killed on `Hung`/respawn).
 
-The connection task sends heartbeats (it owns the socket) but the supervisor owns the miss count and the `Hung` decision (it owns the state). The connection task reports `PongReceived`/`PongTimedOut`; the supervisor increments the miss count and decides `Hung`. Clean separation: connection does I/O, supervisor does policy.
+**The supervisor owns the heartbeat timer and the miss count.** It sends `Heartbeat` downstream on the 5s interval (via its own `select!` over the interval, the upstream channel, and the child wait), counts missed `Pong`s, and declares `Hung` at 3. This supersedes the original Q5 wording ("the connection task sends heartbeats"), which contradicted the Q3 grill resolution (all messages upstream, supervisor routes). The plan's Q3 was right; the ADR was wrong on that line. The connection task stays pure I/O.
+
+The connection triple (`ConnTriple`: upstream receiver, downstream sender, connection task handle, child process) lives in the `Ready` and `Draining` state structs (Q4, grill Q8). This is the honest typestate: the state owns what it needs, illegal transitions don't compile because the transition methods on the inner types consume `self` and move or drop the triple. `Ready::on_hung` drops the triple (cancels the task, kills the child); `Ready::on_drain` moves it into `Draining`. Chosen over a supervisor side field (`Option<ConnTriple>`), which would violate Q2's "inner structs carry invariants" by hiding the connection's lifetime outside the type.
 
 Chosen over a single task with `select!` (the state machine outlives any single connection; a connection task dying on `Hung` would lose the supervisor state, so the supervisor must be separate, which collapses to this option). Chosen over thread-per-connection with `std` sync (ADR 0013 mandates tokio for everything async; `std` threads + locks on the state machine is the failure mode GOALS.md goal 2 warns against).
 
