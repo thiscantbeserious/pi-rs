@@ -43,7 +43,7 @@ jobs:
 
           PR_NUMBER=${{ github.event.pull_request.number }}
           RESPONSE=$(curl -s -u "$SONAR_TOKEN:" \
-            "https://sonarcloud.io/api/issues/search?componentKeys=thiscantbeserious_pi-rs&pullRequest=${PR_NUMBER}&issueStatuses=OPEN,CONFIRMED&sinceLeakPeriod=true&ps=1")
+            "https://sonarcloud.io/api/issues/search?componentKeys=thiscantbeserious_pi-rs&pullRequest=${PR_NUMBER}&issueStatuses=OPEN,CONFIRMED&sinceLeakPeriod=true&ps=50")
 
           TOTAL=$(echo "$RESPONSE" | jq -r '.total')
 
@@ -54,6 +54,10 @@ jobs:
           fi
 
           echo "New issues on PR #${PR_NUMBER}: $TOTAL"
+
+          # Print each issue's rule, location, and message so the PR author
+          # can see what to fix without logging into the Sonar dashboard.
+          echo "$RESPONSE" | jq -r '.issues[] | "  \(.rule) at \(.component):\(.line) — \(.message)"' 2>/dev/null
 
           if [ "$TOTAL" -gt 0 ]; then
             echo ""
