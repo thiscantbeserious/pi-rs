@@ -12,10 +12,11 @@ path = "src/lib.rs"
 
 [dependencies]
 pi-protocol.workspace = true
-tokio = { version = "1", features = ["net", "io-util", "rt"] }
+tokio = { version = "1", features = ["net", "io-util", "rt", "process", "time", "sync", "macros"] }
 rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 insta.workspace = true
-tokio = { version = "1", features = ["net", "io-util", "macros", "rt"] }
+tokio = { version = "1", features = ["net", "io-util", "macros", "rt", "process", "time", "sync"] }
 tempfile = "3"
