@@ -1,6 +1,6 @@
 # Built-in tools are Rust-native in the Core
 
-pi's built-in tools (read, edit, write, bash, grep/find [[1]](https://github.com/earendil-works/pi)) are ported to Rust inside the agent loop: no IPC on the hottest tool path, functional when the Extension Host is down, and no credentials or file access routed through the extension process. Default behavior must match pi exactly (truncation limits, output formats) - verified by the ported oracle test suite (ADR 0007).
+pi's built-in tools (read, edit, write, bash, grep, find, ls [[1]](https://github.com/earendil-works/pi)) are ported to Rust inside the agent loop: no IPC on the hottest tool path, functional when the Extension Host is down, and no credentials or file access routed through the extension process. Default behavior must match pi exactly (truncation limits, output formats) - verified by the ported oracle test suite (ADR 0007).
 
 Want-to-have, explicitly not hard-tied: token-optimized output modes (the current pi tool outputs are sometimes suboptimal for context budgets). Any such optimization is opt-in and must never change the parity defaults.
 
@@ -15,4 +15,4 @@ Want-to-have, explicitly not hard-tied: token-optimized output modes (the curren
 
 ## Sources
 
-1. pi coding agent, built-in tool set: https://github.com/earendil-works/pi
+1. pi coding agent, built-in tool set: <https://github.com/earendil-works/pi>

@@ -55,7 +55,7 @@ The dedicated-render-thread-fed-by-channels pattern is standard (tokio channels 
 
 ## pi's provider model is API-type based - ADR 0005 refined
 
-pi providers are (baseUrl + `api` type + auth), where `api: "openai-completions"` is documented as "most compatible" and covers Ollama, vLLM, SGLang, OpenRouter, proxies, and local servers, with `compat` flags (supportsDeveloperRole, supportsReasoningEffort). Native Rust providers are therefore implemented per API type: openai-completions first (broadest coverage), anthropic-messages second, then openai-responses and google-generative-ai. (pi docs/models.md, docs/custom-provider.md)
+pi providers are (baseUrl + `api` type + auth), where `api: "openai-completions"` is documented as "most compatible" and covers Ollama, vLLM, SGLang, OpenRouter, proxies, and local servers, with `compat` flags (supportsDeveloperRole, supportsReasoningEffort). The Oracle (`packages/ai/src/types.ts`) defines ten `KnownApi` values: `openai-completions`, `mistral-conversations`, `openai-responses`, `azure-openai-responses`, `openai-codex-responses`, `anthropic-messages`, `bedrock-converse-stream`, `google-generative-ai`, `google-vertex`, `pi-messages`. Native Rust providers are therefore implemented per API type: the four daily drivers land first (`openai-completions` broadest coverage, `anthropic-messages` incl. Claude Pro/Max OAuth, then `openai-responses` and `google-generative-ai`); the remaining six are full-parity work (ROADMAP Phase 4). See `docs/oracle-drift-audit.md` finding D2. (pi docs/models.md, docs/custom-provider.md)
 
 ## Local first-hand verifications (author's machine, 2026-07-24)
 

@@ -129,7 +129,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Deliverables:**
 
 - [ ] pi's test suite ported feature-by-feature against the Oracle
-- [ ] Remaining native API types: openai-responses, google-generative-ai, completing pi's four-type provider catalog [[9]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) (ADR 0019)
+- [ ] Remaining native API types: `openai-responses`, `google-generative-ai`, `mistral-conversations`, `azure-openai-responses`, `openai-codex-responses`, `bedrock-converse-stream`, `google-vertex`, `pi-messages` — completing all ten `KnownApi` values in the Oracle's provider catalog [[9]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) (ADR 0019; the four daily drivers land first in Phase 3, the remaining six are Phase 4)
 - [ ] Remaining surface: skills, prompt templates, headless mode (ADR 0018), theme completeness, session branching edge cases
 - [ ] Oracle re-baseline performed deliberately if drift demands it, delta-ported and recorded
 

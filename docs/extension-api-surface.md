@@ -28,6 +28,7 @@ Source: `ExtensionAPI` in `types.d.ts`. Each `pi.*` method is a Host Protocol ca
 - [ ] `appendEntry(customType, data?)` custom session entry for state persistence, not sent to LLM (ADR 0016: routes to Core as sole writer)
 - [ ] `setSessionName(name)` / `getSessionName()` session display name
 - [ ] `setLabel(entryId, label?)` bookmark label on an entry
+- [ ] `exec(command, args, options?)` execute a shell command, returns `ExecResult` — `local` (host-owned exec, delegates to `execCommand`, not a Host Protocol message; ADR 0021's binding layer must preserve it)
 
 ### Tools and commands
 
@@ -35,8 +36,8 @@ Source: `ExtensionAPI` in `types.d.ts`. Each `pi.*` method is a Host Protocol ca
 - [ ] `registerCommand(name, options)` slash command (`handler`, `description?`, `getArgumentCompletions?`)
 - [ ] `getCommands()` available slash commands
 - [ ] `getActiveTools()` / `setActiveTools(toolNames)` / `getAllTools()` tool set management
-- [ ] `registerShortcut(shortcut, options)` keybinding (`handler(ctx)`)
-- [ ] `registerFlag(name, options)` CLI flag (`type: boolean|string`, `default?`)
+- [ ] `registerShortcut(shortcut, options)` keybinding (`handler(ctx)`, `description?`)
+- [ ] `registerFlag(name, options)` CLI flag (`type: boolean|string`, `default?`, `description?`)
 - [ ] `getFlag(name)` read a registered flag value
 
 ### Renderers

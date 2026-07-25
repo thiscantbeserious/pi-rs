@@ -1,6 +1,21 @@
 # Providers are Rust-native from day one, the host is strictly extensions-only
 
-Supersedes the bootstrap phase of ADR 0005. No pi core functionality ever runs in the Extension Host: the Core implements pi's API types natively in Rust, openai-completions and anthropic-messages first (the daily drivers), openai-responses and google-generative-ai after. This is tractable because pi's entire provider catalog rests on just these four API types [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md). The host-provider slot in the protocol survives solely for extension-registered custom providers [[2]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md), which is extension support and therefore belongs in the host by definition.
+Supersedes the bootstrap phase of ADR 0005. No pi core functionality ever runs in the Extension Host: the Core implements pi's API types natively in Rust. The Oracle (`packages/ai/src/types.ts` at the pinned version, [ADR 0007](./0007-oracle-guided-full-parity.md)) defines ten `KnownApi` values, each with its own options type and implementation module under `packages/ai/src/api/` [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md):
+
+1. `openai-completions` (daily driver, broadest compat: Ollama, vLLM, OpenRouter, proxies, local servers)
+2. `anthropic-messages` (daily driver, OAuth, the author's real auth path)
+3. `openai-responses`
+4. `google-generative-ai`
+5. `mistral-conversations`
+6. `azure-openai-responses`
+7. `openai-codex-responses`
+8. `bedrock-converse-stream`
+9. `google-vertex`
+10. `pi-messages` (pi's own unified internal API)
+
+The four daily-driver types (1-4) land first in priority order; the remaining six are full-parity work tracked in ROADMAP Phase 4. The host-provider slot in the protocol survives solely for extension-registered custom providers [[2]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md), which is extension support and therefore belongs in the host by definition.
+
+> Corrected 2026-07-25 by `docs/oracle-drift-audit.md` finding D2: this ADR previously claimed "four API types" cover the catalog. The Oracle has ten `KnownApi`. The four-type priority order stands; only the parity total was wrong.
 
 ## Status
 
@@ -22,5 +37,5 @@ accepted, supersedes the host-proxy bootstrap in ADR 0005
 
 ## Sources
 
-1. pi models.json, four API types cover the catalog: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md
-2. pi custom providers, registered by extensions: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md
+1. pi models.json, four API types cover the catalog: <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md>
+2. pi custom providers, registered by extensions: <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/custom-provider.md>

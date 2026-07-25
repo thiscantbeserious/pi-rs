@@ -4,7 +4,7 @@
 
 partially superseded by ADR 0019: the Provider trait and the per-API-type implementation order stand, the host-proxy bootstrap phase is dropped. The host-provider slot remains for extension-registered custom providers only
 
-The Core defines a Provider trait from day one. Its first implementation is a host-proxy that streams through pi-ai in the Extension Host (fastest path to a working end-to-end system, 100% provider and auth compat). Native Rust implementations then land one at a time - implemented per API type, not per brand, mirroring pi's own model (`api: "openai-completions"` etc. with baseUrl + compat flags) [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md): `openai-completions` first (broadest coverage per implementation - Ollama, vLLM, OpenRouter, proxies, local servers), `anthropic-messages` second (daily driver, OAuth), then `openai-responses` and `google-generative-ai`. The proxy path remains permanently as the compatibility slot for custom/exotic TS providers.
+The Core defines a Provider trait from day one. Its first implementation is a host-proxy that streams through pi-ai in the Extension Host (fastest path to a working end-to-end system, 100% provider and auth compat). Native Rust implementations then land one at a time - implemented per API type, not per brand, mirroring pi's own model (`api: "openai-completions"` etc. with baseUrl + compat flags) [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md). The Oracle defines ten `KnownApi` values (see [ADR 0019](./0019-providers-rust-native-day-one.md) for the full list and `docs/oracle-drift-audit.md` finding D2); the four daily drivers land first in priority order: `openai-completions` (broadest coverage - Ollama, vLLM, OpenRouter, proxies, local servers), `anthropic-messages` (daily driver, OAuth), then `openai-responses` and `google-generative-ai`. The proxy path remains permanently as the compatibility slot for custom/exotic TS providers.
 
 ## Considered Options
 
@@ -20,5 +20,5 @@ The Core defines a Provider trait from day one. Its first implementation is a ho
 
 ## Sources
 
-1. pi provider and API-type model (openai-completions, baseUrl, compat flags): https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md
-2. VS Code extension host shares process.env with all extensions: https://safeguard.sh/resources/blog/vscode-extension-security-development-guide
+1. pi provider and API-type model (openai-completions, baseUrl, compat flags): <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md>
+2. VS Code extension host shares process.env with all extensions: <https://safeguard.sh/resources/blog/vscode-extension-security-development-guide>
