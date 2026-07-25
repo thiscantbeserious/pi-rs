@@ -50,7 +50,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Deliverables:**
 
 - [x] Workspace migration (ADR 0011): pi-core, pi-protocol, pi-replay, host/
-- [ ] pi-protocol message types with ts-rs codegen [[2]](https://docs.rs/ts-rs), msgpack over UDS transport (ADR 0006)
+- [x] pi-protocol message types with ts-rs codegen [[2]](https://docs.rs/ts-rs), msgpack over UDS transport (ADR 0006)
 - [ ] Host-side codec benchmark, @msgpack/msgpack [[3]](https://github.com/msgpack/msgpack-javascript) vs msgpackr [[4]](https://github.com/kriszyp/msgpackr) which claims to beat even native JSON.parse on NodeJS (pitfall P17 decides on measurements, not claims)
 - [ ] Host lifecycle: boot, handshake, heartbeat (ADR 0009), restart and /reload path (ADR 0017)
 - [ ] CI Deno lane with protocol conformance tests generated from pi-protocol
