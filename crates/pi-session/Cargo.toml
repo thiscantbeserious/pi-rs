@@ -1,0 +1,19 @@
+[package]
+name = "pi-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "pi on-disk session format: header, entry types, migrations, naming, context reconstruction (ADR 0008)"
+
+[lib]
+name = "pi_session"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4", "v7"] }
+
+[dev-dependencies]
+insta.workspace = true
