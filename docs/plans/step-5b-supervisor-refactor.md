@@ -31,7 +31,7 @@ Each gets unit tests in the lib. The `run()` loop becomes thin: call I/O, get an
 
 ### 3. Split `mock_host::main()` complexity
 
-Extract the message-handling loop into an `async fn handle_message(stream: &mut UnixStream, msg: Message) -> HandleResult` helper, where `HandleResult` is an enum (`Continue`, `Exit(ExitCode)`). `main()` becomes: parse args, connect, handshake, loop calling `handle_message`. The pre/post-handshake mode dispatch is further split into `handle_pre_handshake_mode` and `handle_post_handshake_mode` to keep `main()` under the cognitive complexity limit.
+Extract the message-handling loop into a `fn handle_message(msg, stream) -> Option<ExitCode>` helper. `main()` becomes: parse args, connect, handshake, loop calling `handle_message`.
 
 ### 4. Reduce `run()` cognitive complexity
 
@@ -64,3 +64,7 @@ The supervisor is pi-rs-native (pi is single-process). No Oracle permalink. ADR 
 - The real host binary (`host/main.ts`) — still step 10, not affected by this refactor.
 - The exit-gate-2 chaos test — still step 11, depends on the supervisor working but not on its internal structure.
 - `reload()` — still step 8, lands after the refactor.
+
+## Divergences from plan (recorded after implementation)
+
+- `handle_message` signature: the plan specified `fn handle_message(msg, stream) -> Option<ExitCode>`. Delivered as `async fn handle_message(stream: &mut UnixStream, msg: Message) -> HandleResult` where `HandleResult` is an enum (`Continue`, `Exit(ExitCode)`). The async is needed because `write_frame` is async. The enum return is clearer than `Option` for the three-way result (continue, exit with code, write error). Additional `handle_pre_handshake_mode` and `handle_post_handshake_mode` functions were extracted to keep `main()` under the Sonar cognitive complexity limit (15).
