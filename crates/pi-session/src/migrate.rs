@@ -1,28 +1,51 @@
 //! v1 -> v2 and v2 -> v3 migrations (ADR 0008, contract §2).
 //!
 //! Mirrors the Oracle's `migrateV1ToV2`, `migrateV2ToV3`, and
-//! `migrateToCurrentVersion`. Mutates in place, returns whether any migration
-//! was applied.
+//! `migrateToCurrentVersion`. Mutates in place.
 
 use crate::entry::FileEntry;
 use crate::header::{SessionHeader, CURRENT_SESSION_VERSION};
+use serde_json::Value;
+use std::collections::HashSet;
+
+/// A migration failure: a mutated JSON value could not be reparsed as a
+/// `SessionHeader` or `SessionEntry`. Surfaced rather than silently swallowed
+/// so a corrupt migration does not produce a fabricated fallback entry.
+#[derive(Debug)]
+pub struct MigrationError {
+    pub source: serde_json::Error,
+    pub context: String,
+}
+
+impl std::fmt::Display for MigrationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "migration error ({}): {}", self.context, self.source)
+    }
+}
+
+impl std::error::Error for MigrationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
 
 /// Run all necessary migrations to bring entries to the current version.
-/// Mutates in place. Returns true if any migration was applied.
+/// Mutates in place. Returns `Ok(true)` if any migration was applied, `Ok(false)`
+/// if the file was already at the current version.
 ///
 /// Oracle: `migrateToCurrentVersion` in session-manager.ts at v0.82.0.
-pub fn migrate_to_current_version(entries: &mut [FileEntry]) -> bool {
+pub fn migrate_to_current_version(entries: &mut [FileEntry]) -> Result<bool, MigrationError> {
     let version = header_version(entries).unwrap_or(1);
     if version >= CURRENT_SESSION_VERSION {
-        return false;
+        return Ok(false);
     }
     if version < 2 {
-        migrate_v1_to_v2(entries);
+        migrate_v1_to_v2(entries)?;
     }
     if version < 3 {
-        migrate_v2_to_v3(entries);
+        migrate_v2_to_v3(entries)?;
     }
-    true
+    Ok(true)
 }
 
 fn header_version(entries: &[FileEntry]) -> Option<u32> {
@@ -36,84 +59,77 @@ fn header_version(entries: &[FileEntry]) -> Option<u32> {
 /// entry (8-hex, collision-checked); convert compaction.firstKeptEntryIndex
 /// to firstKeptEntryId.
 ///
-/// Oracle: `migrateV1ToV2`. The Oracle generates short ids from randomUUID;
-/// pi-rs generates them from uuid v7 truncated to 8 hex chars (collision
-/// checked). The id format is validated by the same regex either way.
-fn migrate_v1_to_v2(entries: &mut [FileEntry]) {
+/// Two passes: (1) assign every entry its final id and parentId, recording the
+/// final id by index; (2) resolve compaction.firstKeptEntryIndex through the
+/// completed id map so firstKeptEntryId holds the target's actual (possibly
+/// newly-assigned) id. The Oracle assigns all ids before resolving the index.
+fn migrate_v1_to_v2(entries: &mut [FileEntry]) -> Result<(), MigrationError> {
     // Set header version.
     for entry in entries.iter_mut() {
         if let FileEntry::Header(h) = entry {
             h.version = Some(2);
         }
     }
-    // Assign ids. The Oracle assigns sequentially to non-header entries.
-    // pi-rs does the same, generating a short id per entry (collision-checked).
-    // Pre-build an index->id map (immutable) so the mutable loop can look up
-    // firstKeptEntryIndex targets without borrowing `entries` again.
-    let id_by_index: Vec<Option<String>> = entries
-        .iter()
-        .map(|e| entry_id(e).map(|s| s.to_string()))
-        .collect();
-    let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Pass 1: assign id/parentId, recording the final id for each index.
+    let mut final_ids: Vec<Option<String>> = Vec::with_capacity(entries.len());
+    let mut used: HashSet<String> = HashSet::new();
     let mut prev_id: Option<String> = None;
     for entry in entries.iter_mut() {
         if let FileEntry::Header(_) = entry {
+            final_ids.push(None);
             continue;
         }
-        // For migration we operate on the JSON value to handle the v1 shape
-        // (no id/parentId, possibly firstKeptEntryIndex on compaction).
-        // Re-serialize to a value, mutate, re-parse. This is O(n) per entry
-        // but migrations run once per file load.
-        let value = entry_to_json(entry);
-        let mut obj = value.as_object().cloned().unwrap_or_default();
-        let first_kept_entry_id_from_index =
-            if obj.get("type").and_then(|v| v.as_str()) == Some("compaction") {
-                obj.get("firstKeptEntryIndex")
-                    .and_then(|v| v.as_u64())
-                    .and_then(|idx| id_by_index.get(idx as usize).cloned().flatten())
-            } else {
-                None
-            };
-        if obj
-            .get("id")
-            .and_then(|v| v.as_str())
-            .is_none_or(|s| s.is_empty())
-        {
-            let id = generate_short_id(&used);
-            used.insert(id.clone());
-            obj.insert("id".into(), serde_json::Value::String(id));
-        } else if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
-            used.insert(id.to_string());
-        }
+        let mut obj = entry_to_json(entry)
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        let id = match obj.get("id").and_then(|v| v.as_str()) {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => {
+                let new = generate_short_id(&used);
+                used.insert(new.clone());
+                new
+            }
+        };
+        obj.insert("id".into(), Value::String(id.clone()));
         obj.insert(
             "parentId".into(),
-            prev_id
-                .take()
-                .map(serde_json::Value::String)
-                .unwrap_or(serde_json::Value::Null),
+            prev_id.take().map(Value::String).unwrap_or(Value::Null),
         );
-        // Track current id as prev for the next entry.
-        if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
-            prev_id = Some(id.to_string());
-        }
-        // Convert compaction.firstKeptEntryIndex -> firstKeptEntryId.
-        if obj.get("type").and_then(|v| v.as_str()) == Some("compaction") {
-            if let Some(target_id) = first_kept_entry_id_from_index {
-                obj.insert(
-                    "firstKeptEntryId".into(),
-                    serde_json::Value::String(target_id),
-                );
-                obj.remove("firstKeptEntryIndex");
-            }
-        }
-        *entry = json_to_entry(&serde_json::Value::Object(obj));
+        prev_id = Some(id.clone());
+        final_ids.push(Some(id));
+        *entry = json_to_entry(&Value::Object(obj))?;
     }
+    // Pass 2: resolve compaction.firstKeptEntryIndex -> firstKeptEntryId using
+    // the completed id map, so a target that had no v1 id resolves to its
+    // newly-assigned id rather than an empty string.
+    for entry in entries.iter_mut() {
+        let is_compaction = matches!(
+            entry,
+            FileEntry::Entry(crate::entry::SessionEntry::Compaction { .. })
+        );
+        if !is_compaction {
+            continue;
+        }
+        let mut obj = entry_to_json(entry)
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if let Some(idx) = obj.get("firstKeptEntryIndex").and_then(|v| v.as_u64()) {
+            if let Some(Some(target_id)) = final_ids.get(idx as usize) {
+                obj.insert("firstKeptEntryId".into(), Value::String(target_id.clone()));
+            }
+            obj.remove("firstKeptEntryIndex");
+        }
+        *entry = json_to_entry(&Value::Object(obj))?;
+    }
+    Ok(())
 }
 
 /// v2 -> v3: set header version to 3; rename message role hookMessage -> custom.
 ///
 /// Oracle: `migrateV2ToV3`.
-fn migrate_v2_to_v3(entries: &mut [FileEntry]) {
+fn migrate_v2_to_v3(entries: &mut [FileEntry]) -> Result<(), MigrationError> {
     for entry in entries.iter_mut() {
         if let FileEntry::Header(h) = entry {
             h.version = Some(CURRENT_SESSION_VERSION);
@@ -121,70 +137,67 @@ fn migrate_v2_to_v3(entries: &mut [FileEntry]) {
         }
         // Rename hookMessage -> custom on message entries.
         let value = entry_to_json(entry);
-        if let Some(obj) = value.as_object() {
-            if obj.get("type").and_then(|v| v.as_str()) == Some("message") {
-                if let Some(msg) = obj.get("message").and_then(|v| v.as_object()) {
-                    if msg.get("role").and_then(|v| v.as_str()) == Some("hookMessage") {
-                        let mut new_obj = obj.clone();
-                        if let Some(msg) =
-                            new_obj.get_mut("message").and_then(|v| v.as_object_mut())
-                        {
-                            msg.insert("role".into(), serde_json::Value::String("custom".into()));
-                        }
-                        *entry = json_to_entry(&serde_json::Value::Object(new_obj));
-                    }
-                }
-            }
+        let Some(obj) = value.as_object() else {
+            continue;
+        };
+        if obj.get("type").and_then(|v| v.as_str()) != Some("message") {
+            continue;
         }
+        let Some(msg) = obj.get("message").and_then(|v| v.as_object()) else {
+            continue;
+        };
+        if msg.get("role").and_then(|v| v.as_str()) != Some("hookMessage") {
+            continue;
+        }
+        let mut new_obj = obj.clone();
+        if let Some(msg) = new_obj.get_mut("message").and_then(|v| v.as_object_mut()) {
+            msg.insert("role".into(), Value::String("custom".into()));
+        }
+        *entry = json_to_entry(&Value::Object(new_obj))?;
     }
+    Ok(())
 }
 
-fn entry_to_json(entry: &FileEntry) -> serde_json::Value {
+fn entry_to_json(entry: &FileEntry) -> Value {
     match entry {
-        FileEntry::Header(h) => serde_json::to_value(h).unwrap_or(serde_json::Value::Null),
-        FileEntry::Entry(e) => serde_json::to_value(e).unwrap_or(serde_json::Value::Null),
+        FileEntry::Header(h) => serde_json::to_value(h).unwrap_or(Value::Null),
+        FileEntry::Entry(e) => serde_json::to_value(e).unwrap_or(Value::Null),
     }
 }
 
-fn json_to_entry(value: &serde_json::Value) -> FileEntry {
+/// Classify a parsed JSON value as a header or an entry. Returns Err on
+/// deserialization failure so callers can surface migration corruption rather
+/// than fabricate a fallback entry.
+fn json_to_entry(value: &Value) -> Result<FileEntry, MigrationError> {
     if value.get("type").and_then(|v| v.as_str()) == Some("session") {
-        if let Ok(h) = serde_json::from_value::<SessionHeader>(value.clone()) {
-            return FileEntry::Header(h);
-        }
+        return serde_json::from_value::<SessionHeader>(value.clone())
+            .map(FileEntry::Header)
+            .map_err(|e| MigrationError {
+                source: e,
+                context: "session header".into(),
+            });
     }
-    match serde_json::from_value::<crate::entry::SessionEntry>(value.clone()) {
-        Ok(e) => FileEntry::Entry(e),
-        Err(_) => FileEntry::Entry(crate::entry::SessionEntry::Label {
-            base: crate::entry::EntryBase {
-                id: "migration-fallback".into(),
-                parent_id: None,
-                timestamp: String::new(),
-            },
-            target_id: String::new(),
-            label: None,
-        }),
-    }
-}
-
-fn entry_id(entry: &FileEntry) -> Option<&str> {
-    match entry {
-        FileEntry::Entry(e) => Some(e.id()),
-        _ => None,
-    }
+    serde_json::from_value::<crate::entry::SessionEntry>(value.clone())
+        .map(FileEntry::Entry)
+        .map_err(|e| MigrationError {
+            source: e,
+            context: "session entry".into(),
+        })
 }
 
 /// Generate an 8-hex-char id, collision-checked against `used`.
-/// Oracle: `generateId` uses randomUUID().slice(0,8).
-fn generate_short_id(used: &std::collections::HashSet<String>) -> String {
+/// Oracle: `generateId` uses `randomUUID().slice(0,8)` (random, not
+/// time-ordered). pi-rs uses uuid v4 to match the randomness characteristic.
+fn generate_short_id(used: &HashSet<String>) -> String {
     for _ in 0..100 {
-        let id = uuid::Uuid::now_v7().simple().to_string();
-        let short = &id[..8];
+        let candidate = uuid::Uuid::new_v4().simple().to_string();
+        let short = &candidate[..8];
         if !used.contains(short) {
             return short.to_string();
         }
     }
-    // Fallback: full uuid.
-    uuid::Uuid::now_v7().to_string()
+    // Fallback: a fresh full v4 uuid (still random, just longer).
+    uuid::Uuid::new_v4().to_string()
 }
 
 #[cfg(test)]
@@ -210,7 +223,7 @@ mod tests {
             "t".into(),
             "/c".into(),
         ))];
-        assert!(!migrate_to_current_version(&mut entries));
+        assert!(!migrate_to_current_version(&mut entries).unwrap());
     }
 
     #[test]
@@ -227,7 +240,7 @@ mod tests {
                 label: Some("mark".into()),
             }),
         ];
-        assert!(migrate_to_current_version(&mut entries));
+        assert!(migrate_to_current_version(&mut entries).unwrap());
         match &entries[0] {
             FileEntry::Header(h) => assert_eq!(h.version, Some(3)),
             _ => panic!("header moved"),
@@ -261,7 +274,7 @@ mod tests {
                 message: serde_json::json!({"role":"hookMessage","content":"hi"}),
             }),
         ];
-        assert!(migrate_to_current_version(&mut entries));
+        assert!(migrate_to_current_version(&mut entries).unwrap());
         match &entries[1] {
             FileEntry::Entry(crate::entry::SessionEntry::Message { message, .. }) => {
                 assert_eq!(message["role"], "custom", "hookMessage -> custom");

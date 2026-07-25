@@ -22,6 +22,7 @@ pub struct SessionHeader {
     /// Always the literal `"session"`. The wire tag for a header line.
     #[serde(rename = "type")]
     pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<u32>,
     pub id: String,
     pub timestamp: String,

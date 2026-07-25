@@ -20,23 +20,25 @@ use std::collections::HashMap;
 pub fn build_session_path<'a>(
     entries: &'a [SessionEntry],
     leaf_id: Option<&str>,
-    by_id: Option<&HashMap<String, SessionEntry>>,
+    by_id: Option<&HashMap<String, &'a SessionEntry>>,
 ) -> Vec<&'a SessionEntry> {
-    let index = by_id.cloned().unwrap_or_else(|| build_index(entries));
+    let owned_index: HashMap<String, &'a SessionEntry>;
+    let index = match by_id {
+        Some(b) => b,
+        None => {
+            owned_index = build_index(entries);
+            &owned_index
+        }
+    };
     let leaf = match leaf_id {
         None | Some("") => entries.last(),
-        Some(id) => index.get(id).or_else(|| entries.last()),
+        Some(id) => index.get(id).copied().or_else(|| entries.last()),
     };
     let mut path = Vec::new();
     let mut current = leaf;
     while let Some(entry) = current {
-        path.push(
-            entries
-                .iter()
-                .find(|e| e.id() == entry.id())
-                .expect("entry in entries"),
-        );
-        current = entry.parent_id().and_then(|pid| index.get(pid));
+        path.push(entry);
+        current = entry.parent_id().and_then(|pid| index.get(pid).copied());
     }
     path.reverse();
     path
@@ -49,7 +51,7 @@ pub fn build_session_path<'a>(
 pub fn build_context_entries<'a>(
     entries: &'a [SessionEntry],
     leaf_id: Option<&str>,
-    by_id: Option<&HashMap<String, SessionEntry>>,
+    by_id: Option<&HashMap<String, &'a SessionEntry>>,
 ) -> Vec<&'a SessionEntry> {
     let path = build_session_path(entries, leaf_id, by_id);
     let compaction = path
@@ -117,11 +119,8 @@ pub fn session_entry_to_context_messages(entry: &SessionEntry) -> Option<Context
     }
 }
 
-fn build_index(entries: &[SessionEntry]) -> HashMap<String, SessionEntry> {
-    entries
-        .iter()
-        .map(|e| (e.id().to_string(), e.clone()))
-        .collect()
+fn build_index(entries: &[SessionEntry]) -> HashMap<String, &SessionEntry> {
+    entries.iter().map(|e| (e.id().to_string(), e)).collect()
 }
 
 #[cfg(test)]

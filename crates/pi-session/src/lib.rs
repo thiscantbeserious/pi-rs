@@ -18,6 +18,6 @@ pub mod parse;
 pub use context::{build_context_entries, build_session_path, session_entry_to_context_messages};
 pub use entry::{FileEntry, SessionEntry};
 pub use header::{SessionHeader, CURRENT_SESSION_VERSION};
-pub use migrate::migrate_to_current_version;
+pub use migrate::{migrate_to_current_version, MigrationError};
 pub use naming::{session_dir_slug, session_file_name};
 pub use parse::{parse_session_lines, parse_session_str};
