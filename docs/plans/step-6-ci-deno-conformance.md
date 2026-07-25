@@ -4,7 +4,7 @@ The last Phase 1 deliverable. A CI Deno lane that runs the codec tests and a pro
 
 ## Scope
 
-1. A Deno conformance test (`host/conformance_test.ts`) that reads `host/protocol/fixtures.bin`, decodes each length-prefixed msgpack frame, asserts the decoded shape matches the expected TS type, re-encodes, and writes the re-encoded bytes for the Rust side to compare.
+1. A Deno conformance test (`host/conformance_test.ts`) that reads `host/protocol/fixtures.bin`, decodes each length-prefixed msgpack frame, asserts the decoded shape matches the expected TS type, re-encodes, and asserts byte-identity with the original frame (the Deno side does this locally, not via a round-trip to Rust).
 2. A CI job (`.github/workflows/ci.yml`) that installs Deno, runs `deno test host/codec_test.ts` and `deno test host/conformance_test.ts` on every PR.
 3. The exit gate 1 proof: "typed protocol round-trip: Core to host and back, demo runnable from CI" — the conformance test IS the demo, running in CI.
 
