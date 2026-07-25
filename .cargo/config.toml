@@ -11,3 +11,6 @@ TS_RS_EXPORT_DIR = { value = "host/protocol", relative = true }
 # message IDs and sequence numbers stay well under 2^53, and `number` round-trips
 # through MessagePack cleanly where `bigint` would not (ADR 0006).
 TS_RS_LARGE_INT = "number"
+# Generated imports use .ts extensions so Deno's strict resolver accepts
+# them (ADR 0011: the host imports the generated types directly).
+TS_RS_IMPORT_EXTENSION = "ts"
