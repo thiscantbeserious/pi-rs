@@ -2,7 +2,11 @@
 // interface). A codec that cannot round-trip the protocol payload shapes is
 // disqualified before the benchmark even runs.
 //
-// Run: deno test --allow-net --minimum-dependency-age=0 host/codec_test.ts
+// Also tests cross-codec decode: every encoder's output must decode with every
+// codec. A self-round-trip can pass when a codec emits a representation its peer
+// cannot consume; the cross-codec check catches that.
+//
+// Run: deno test --allow-net --allow-env --minimum-dependency-age=0 host/codec_test.ts
 
 import { assertEquals } from "jsr:@std/assert@1";
 import { msgpackCodec, msgpackrCodec, type Codec } from "./codec.ts";
@@ -43,17 +47,36 @@ const payloads: { name: string; value: unknown }[] = [
   },
 ];
 
-Deno.test("each codec round-trips every protocol payload shape", async () => {
+Deno.test("each codec round-trips every protocol payload shape", () => {
   for (const codec of codecs) {
     for (const { name, value } of payloads) {
-      const encoded = await codec.encode(value);
-      const decoded = await codec.decode(encoded);
+      const encoded = codec.encode(value);
+      const decoded = codec.decode(encoded);
       assertEquals(normalize(decoded), normalize(value), `${codec.name} round-trip failed for ${name}`);
     }
   }
 });
 
-Deno.test("each codec handles the max-safe-integer request_id boundary", async () => {
+Deno.test("cross-codec decode: every encoder's output decodes with every codec", () => {
+  // A self-round-trip can pass when a codec emits a representation its peer
+  // cannot consume. Decode every encoder's bytes with every codec to catch
+  // representation incompatibility.
+  for (const { name, value } of payloads) {
+    for (const encoder of codecs) {
+      const bytes = encoder.encode(value);
+      for (const decoder of codecs) {
+        const decoded = decoder.decode(bytes);
+        assertEquals(
+          normalize(decoded),
+          normalize(value),
+          `${decoder.name} could not decode ${encoder.name}'s ${name}`,
+        );
+      }
+    }
+  }
+});
+
+Deno.test("each codec handles the max-safe-integer request_id boundary", () => {
   // ADR 0022 Q6 + the request_id 53-bit constraint documented in messages.rs.
   const value = {
     type: "EchoRequest",
@@ -61,8 +84,8 @@ Deno.test("each codec handles the max-safe-integer request_id boundary", async (
     payload: new Uint8Array([0]),
   };
   for (const codec of codecs) {
-    const encoded = await codec.encode(value);
-    const decoded = await codec.decode(encoded) as typeof value;
+    const encoded = codec.encode(value);
+    const decoded = codec.decode(encoded) as typeof value;
     assertEquals(
       decoded.request_id,
       value.request_id,

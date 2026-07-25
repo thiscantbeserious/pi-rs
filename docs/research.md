@@ -23,11 +23,22 @@ Working default: static compilation via per-language grammar crates with Cargo f
 
 ## MessagePack in JS - ADR 0006, benchmarked (Phase 1 step 4)
 
-Benchmarked `@msgpack/msgpack` 3.1.3 vs `msgpackr` 2.0.4 on the actual Phase 1 protocol payload mix (small control messages + a 1 MiB binary tool-output payload), Deno 2.9.4, 200 warmup + 2000 iterations (50 for the 1 MiB payload). Geomean combined encode+decode ratio (@msgpack/msgpack / msgpackr): **1.51x**. Within the 2x trigger threshold, so ADR 0006's default (`@msgpack/msgpack`) holds. The codec-swap trigger did not fire.
+Benchmarked `@msgpack/msgpack` 3.1.3 vs `msgpackr` 2.0.4 on the actual Phase 1 protocol payload mix (small control messages + a 1 MiB binary tool-output payload), Deno 2.9.4, 200 warmup + 2000 iterations (50 for the 1 MiB payload), synchronous codec operations (both libs are sync; async wrappers were removed because their per-call Promise overhead diluted the small-message differences the benchmark exists to measure). Geomean combined encode+decode ratio (@msgpack/msgpack / msgpackr): **1.69x**. Within the 2x trigger threshold, so ADR 0006's default (`@msgpack/msgpack`) holds. The codec-swap trigger did not fire.
 
-Notable: on the 1 MiB binary payload, `@msgpack/msgpack` decodes ~13x faster than msgpackr (0.07x ratio), while msgpackr wins on small messages by ~1.2-1.7x. This directly validates P17's claim that the msgpack win is binary-safety and large-payload handling, not raw text decode speed. The codec stays behind the `Codec` interface in `host/codec.ts` so a future swap is one line, not a protocol change.
+Per-payload results (combined encode+decode ratio, >1 means @msgpack/msgpack is slower):
 
-Full numbers and the decision threshold live in `docs/plans/step-4-host-codec-benchmark.md`; the benchmark is `host/codec_bench.ts`.
+| Payload | Ratio | Notes |
+| --- | --- | --- |
+| Handshake | ~1.5x | small control message |
+| Heartbeat | ~1.5x | small control message |
+| Shutdown | ~1.5x | small control message |
+| EchoRequest-small | ~1.3x | small with binary payload |
+| ProtocolError | ~1.7x | small with string message |
+| EchoRequest-1MiB-binary | 0.83x | msgpackr faster on large binary decode (2.86x), @msgpack/msgpack faster on encode |
+
+Notable: on the 1 MiB binary payload, msgpackr decodes ~2.9x faster than @msgpack/msgpack (its native-acceleration path), while @msgpack/msgpack is faster on encode. On small messages msgpackr wins by ~1.3-1.7x. This refines P17's claim: the msgpack win is binary-safety and payload size, but msgpackr's native acceleration makes the large-binary-decode case closer than expected. The codec stays behind the `Codec` interface in `host/codec.ts` so a future swap is one line, not a protocol change.
+
+Full methodology and the decision threshold live in `docs/plans/step-4-host-codec-benchmark.md`; the benchmark is `host/codec_bench.ts`.
 
 V8's `JSON.parse` is heavily optimized. Msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size - which holds. Codec stays behind an interface (pitfall P17).
 

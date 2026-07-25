@@ -35,6 +35,21 @@ This is a benchmark, not a correctness feature, so "RED" is "no benchmark exists
 
 The codec choice is pi-rs-native (pi is single-process; the Host Protocol is new). No pi equivalent to cite per workflow step 9. ADR 0006 is the design source.
 
+## Result (recorded after the benchmark ran)
+
+Geomean combined encode+decode ratio (@msgpack/msgpack / msgpackr): **1.69x**, within the 2x threshold. ADR 0006's default (`@msgpack/msgpack`) holds. The codec-swap trigger did not fire.
+
+| Payload | Combined ratio | Notes |
+| --- | --- | --- |
+| Handshake | ~1.5x | small control message |
+| Heartbeat | ~1.5x | small control message |
+| Shutdown | ~1.5x | small control message |
+| EchoRequest-small | ~1.3x | small with binary payload |
+| ProtocolError | ~1.7x | small with string message |
+| EchoRequest-1MiB-binary | 0.83x | msgpackr faster on large binary decode (2.86x), @msgpack/msgpack faster on encode |
+
+Notable: the 1 MiB binary decode case is where msgpackr's native acceleration shows (2.86x faster than @msgpack/msgpack). On small messages msgpackr wins by ~1.3-1.7x. The decision holds but the margin (1.69x) is close enough that a future re-benchmark is warranted if the protocol payload mix shifts toward large binary frames.
+
 ## Out of scope
 
 - Wiring the chosen codec into the actual host transport (step 5).
