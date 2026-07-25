@@ -81,15 +81,21 @@ impl HostSupervisor {
         let listener = UnixListener::bind(&self.config.socket_path)?;
         let mut state = HostState::stopped();
         let mut crash_count: u32 = 0;
+        let mut reload = self.reload_signal.take();
 
         loop {
-            // Take the reload signal: it's only consumed once, on the first
-            // Ready transition. After that it's None.
-            let reload = self.reload_signal.take();
+            // Only pass the reload signal when entering Ready; it stays
+            // None for all other transitions so it survives Stopped -> Booting.
+            let reload_for_ready = if matches!(state, HostState::Ready(_)) {
+                reload.take()
+            } else {
+                None
+            };
             state = self
-                .transition(state, &mut crash_count, &listener, reload)
+                .transition(state, &mut crash_count, &listener, reload_for_ready)
                 .await?;
-            if matches!(state, HostState::Stopped(_)) {
+            // Drained means /reload completed: respawn, not terminate.
+            if matches!(state, HostState::Stopped(_)) && reload.is_none() {
                 break;
             }
         }
@@ -164,8 +170,10 @@ impl HostSupervisor {
                 }))
             }
             ReadyResult::Drained => {
+                // /reload completed: respawn immediately (ADR 0017).
                 *crash_count = 0;
-                Ok(HostState::Stopped(crate::host_state::Stopped))
+                let process = self.spawn_host().await?;
+                Ok(HostState::Booting(crate::host_state::Booting { process }))
             }
             ReadyResult::ConnectionLost => {
                 Ok(HostState::Reconnecting(crate::host_state::Reconnecting {
@@ -377,9 +385,10 @@ impl HostSupervisor {
                     if ready.conn.downstream.send(shutdown).await.is_err() {
                         break ReadyResult::ConnectionLost;
                     }
-                    // Wait for ShutdownAck.
-                    match ready.conn.upstream.recv().await {
-                        Some(Message::ShutdownAck) => break ReadyResult::Drained,
+                    // Wait for ShutdownAck with a timeout (don't hang
+                    // /reload on a live but unresponsive host).
+                    match tokio::time::timeout(self.config.boot_timeout, ready.conn.upstream.recv()).await {
+                        Ok(Some(Message::ShutdownAck)) => break ReadyResult::Drained,
                         _ => break ReadyResult::ConnectionLost,
                     }
                 }

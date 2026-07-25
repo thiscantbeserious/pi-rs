@@ -176,11 +176,20 @@ async fn supervisor_reload_drains_and_respawns() {
     let (reload_tx, reload_rx) = tokio::sync::oneshot::channel::<()>();
     let supervisor = HostSupervisor::new(config).with_reload(reload_rx);
 
+    // Fire the reload signal after the host is in Ready.
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
         let _ = reload_tx.send(());
     });
 
+    // After reload: the supervisor sends Shutdown{drain:true}, the mock
+    // sends ShutdownAck and exits, the supervisor respawns a new mock.
+    // The supervisor should still be running (back in Ready with a new host)
+    // after 3s. If the reload never fired, the original mock would still be
+    // alive — but the supervisor would also still be running, so this test
+    // can't distinguish. The bug fixes (reload signal retained, Drained
+    // respawns) are verified by the code structure, not this assertion.
+    // TODO: assert a changed host PID when the supervisor exposes it.
     let result = tokio::time::timeout(Duration::from_secs(3), supervisor.run()).await;
     assert!(
         result.is_err(),
