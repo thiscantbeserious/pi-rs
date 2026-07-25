@@ -21,9 +21,15 @@ Working default: **ts-rs** for its simplicity - pi-protocol only needs message/D
 
 Working default: static compilation via per-language grammar crates with Cargo features (agr-style simplicity, no runtime loading). Revisit toward the Zed WASM model only if grammar count/binary size becomes a problem.
 
-## MessagePack in JS - ADR 0006, claim refined
+## MessagePack in JS - ADR 0006, benchmarked (Phase 1 step 4)
 
-V8's `JSON.parse` is heavily optimized. Msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size - which holds. Benchmark `@msgpack/msgpack` vs `msgpackr` at protocol bring-up. Codec stays behind an interface (pitfall P17).
+Benchmarked `@msgpack/msgpack` 3.1.3 vs `msgpackr` 2.0.4 on the actual Phase 1 protocol payload mix (small control messages + a 1 MiB binary tool-output payload), Deno 2.9.4, 200 warmup + 2000 iterations (50 for the 1 MiB payload). Geomean combined encode+decode ratio (@msgpack/msgpack / msgpackr): **1.51x**. Within the 2x trigger threshold, so ADR 0006's default (`@msgpack/msgpack`) holds. The codec-swap trigger did not fire.
+
+Notable: on the 1 MiB binary payload, `@msgpack/msgpack` decodes ~13x faster than msgpackr (0.07x ratio), while msgpackr wins on small messages by ~1.2-1.7x. This directly validates P17's claim that the msgpack win is binary-safety and large-payload handling, not raw text decode speed. The codec stays behind the `Codec` interface in `host/codec.ts` so a future swap is one line, not a protocol change.
+
+Full numbers and the decision threshold live in `docs/plans/step-4-host-codec-benchmark.md`; the benchmark is `host/codec_bench.ts`.
+
+V8's `JSON.parse` is heavily optimized. Msgpack does **not** win on raw text decode speed. ADR 0006's justification is binary-safety (ANSI/UTF-8 blobs without escaping) and payload size - which holds. Codec stays behind an interface (pitfall P17).
 
 ## Deno per-extension sandboxing - ADR 0002 ✅ path verified, re-timed
 
