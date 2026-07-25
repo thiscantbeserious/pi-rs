@@ -31,7 +31,7 @@ Each gets unit tests in the lib. The `run()` loop becomes thin: call I/O, get an
 
 ### 3. Split `mock_host::main()` complexity
 
-Extract the message-handling loop into a `fn handle_message(msg, stream) -> Option<ExitCode>` helper. `main()` becomes: parse args, connect, handshake, loop calling `handle_message`.
+Extract the message-handling loop into an `async fn handle_message(stream: &mut UnixStream, msg: Message) -> HandleResult` helper, where `HandleResult` is an enum (`Continue`, `Exit(ExitCode)`). `main()` becomes: parse args, connect, handshake, loop calling `handle_message`. The pre/post-handshake mode dispatch is further split into `handle_pre_handshake_mode` and `handle_post_handshake_mode` to keep `main()` under the cognitive complexity limit.
 
 ### 4. Reduce `run()` cognitive complexity
 
