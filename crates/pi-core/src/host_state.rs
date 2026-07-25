@@ -12,12 +12,43 @@
 //! BackingOff, Reconnecting, CrashLooping. `Hung` is a transient named state
 //! for log clarity even though it holds no data (ADR 0023 Q4, grill Q1).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use pi_protocol::{Handshake, HandshakeAck, Shutdown, PROTOCOL_VERSION};
 use tokio::process::Child;
+use tokio::sync::mpsc;
+use tokio::time::Instant;
 
-/// A spawned host process handle. Held by `Booting`.
+/// The connection triple: the channels + task handle + child process for one
+/// live host connection. Held by `Ready` and `Draining` (ADR 0023 Q4/Q5, grill
+/// Q8). The supervisor owns the heartbeat timer + miss count; this triple is
+/// the I/O surface the supervisor routes messages through.
+pub struct ConnTriple {
+    pub upstream: mpsc::Receiver<pi_protocol::Message>,
+    pub downstream: mpsc::Sender<pi_protocol::Message>,
+    pub conn_task: tokio::task::JoinHandle<std::io::Result<()>>,
+    pub child: Child,
+}
+
+impl ConnTriple {
+    /// Drop the downstream sender (so the connection task exits), await the
+    /// task, and kill the child if still alive. Used on Hung / connection loss.
+    pub async fn shutdown(mut self) {
+        // Drop the sender first so the connection task's downstream.recv()
+        // returns None and the task exits cleanly.
+        self.downstream.closed().await;
+        // Cancel the task if it hasn't exited.
+        self.conn_task.abort();
+        let _ = self.conn_task.await;
+        // Kill the child if still alive.
+        let _ = self.child.start_kill();
+        let _ = self.child.wait().await;
+    }
+}
+
+/// A spawned host process handle. Held by `Booting` (before the connection is
+/// established). Once the handshake completes, the child moves into the
+/// `ConnTriple` held by `Ready`.
 pub struct HostProcess {
     pub child: Child,
 }
@@ -32,9 +63,12 @@ pub struct Booting {
     pub process: HostProcess,
 }
 
-/// Ready: handshake accepted, HandshakeAck sent. Host is live.
+/// Ready: handshake accepted, HandshakeAck sent. Host is live. Holds the
+/// `ConnTriple` (I/O surface) and the miss count. The supervisor owns the
+/// heartbeat timer and sends `Heartbeat` downstream on the interval (ADR 0023
+/// Q5, grill Q7).
 pub struct Ready {
-    pub process: HostProcess,
+    pub conn: ConnTriple,
     /// Consecutive missed Pongs. 3 → Hung (ADR 0022 Q7).
     pub missed_pongs: u32,
 }
@@ -46,9 +80,10 @@ pub struct Ready {
 pub struct Hung;
 
 /// Draining: Core sent Shutdown{drain:true} (for /reload), waiting for
-/// ShutdownAck or host exit.
+/// ShutdownAck or host exit. Holds the `ConnTriple` so the supervisor can
+/// keep reading the ack and detect host exit.
 pub struct Draining {
-    pub process: HostProcess,
+    pub conn: ConnTriple,
 }
 
 /// BackingOff: a boot crash occurred (crash count < 5); wait the backoff
@@ -114,10 +149,12 @@ pub enum BootCrashOutcome {
 
 impl Booting {
     /// Booting → Ready: valid Handshake received, version matches.
-    /// Crash count resets on successful handshake (ADR 0023 Q2).
-    pub fn on_handshake_ok(self) -> Ready {
+    /// Takes the ConnTriple built during the boot phase (the connection task,
+    /// channels, and child). Crash count resets on successful handshake
+    /// (ADR 0023 Q2).
+    pub fn on_handshake_ok(self, conn: ConnTriple) -> Ready {
         Ready {
-            process: self.process,
+            conn,
             missed_pongs: 0,
         }
     }
@@ -138,24 +175,24 @@ impl Booting {
 
 impl Ready {
     /// Ready → Hung: 3 consecutive missed Pongs (ADR 0022 Q7).
-    /// The connection is dropped here; the host process is killed by the
-    /// supervisor closing the socket (a hung host won't process Shutdown).
-    pub fn on_hung(self) -> Hung {
-        Hung
+    /// Consumes self and returns the ConnTriple for the supervisor to shut
+    /// down (cancel the task, kill the child). A hung host won't process
+    /// Shutdown, so the connection is torn down, not drained.
+    pub fn into_hung(self) -> (Hung, ConnTriple) {
+        (Hung, self.conn)
     }
 
     /// Ready → Draining: Core sends Shutdown{drain:true} for /reload.
+    /// Moves the ConnTriple into Draining so the supervisor can keep reading
+    /// the ShutdownAck.
     pub fn on_drain(self) -> Draining {
-        Draining {
-            process: self.process,
-        }
+        Draining { conn: self.conn }
     }
 
-    /// Record a missed Pong. Returns Ready with incremented count, or Hung
-    /// if the count hit 3 (caller then calls on_hung).
+    /// Record a missed Pong. Returns Ready with incremented count.
     pub fn on_pong_missed(self) -> Ready {
         Ready {
-            process: self.process,
+            conn: self.conn,
             missed_pongs: self.missed_pongs + 1,
         }
     }
@@ -163,7 +200,7 @@ impl Ready {
     /// Record a received Pong. Resets the miss count.
     pub fn on_pong(self) -> Ready {
         Ready {
-            process: self.process,
+            conn: self.conn,
             missed_pongs: 0,
         }
     }
@@ -184,9 +221,10 @@ impl Hung {
 }
 
 impl Draining {
-    /// Draining → Stopped: ShutdownAck received or host exited.
-    pub fn on_drained(self) -> Stopped {
-        Stopped
+    /// Draining → Stopped: ShutdownAck received or host exited. Returns the
+    /// ConnTriple for the supervisor to shut down cleanly.
+    pub fn on_drained(self) -> (Stopped, ConnTriple) {
+        (Stopped, self.conn)
     }
 }
 
@@ -248,18 +286,30 @@ pub enum HandshakeRejection {
 
 // --- Backoff calculator (ADR 0023 Q2: exponential 1->2->4->8->30 cap). ---
 
-/// The backoff duration for a given crash count (1-indexed: the 1st crash
-/// waits 1s, the 2nd 2s, ... capped at 30s). Resets on successful handshake.
-pub fn backoff_for(crash_count: u32) -> Duration {
-    let secs = match crash_count {
+/// The backoff multiplier for a given crash count (1-indexed: the 1st crash
+/// waits 1x, the 2nd 2x, ... capped at 30x). Resets on successful handshake.
+/// The actual duration is `base * multiplier` where `base` is passed by the
+/// caller (1s in production, 100ms in tests).
+pub fn backoff_multiplier(crash_count: u32) -> u64 {
+    match crash_count {
         0 => 0,
         1 => 1,
         2 => 2,
         3 => 4,
         4 => 8,
         _ => 30,
-    };
-    Duration::from_secs(secs)
+    }
+}
+
+/// The backoff duration for a given crash count, using the default 1s base.
+/// Tests should use `backoff_for_scaled` with a shorter base.
+pub fn backoff_for(crash_count: u32) -> Duration {
+    Duration::from_secs(backoff_multiplier(crash_count))
+}
+
+/// The backoff duration for a given crash count, scaled by `base`.
+pub fn backoff_for_scaled(crash_count: u32, base: Duration) -> Duration {
+    base * backoff_multiplier(crash_count) as u32
 }
 
 /// What to send for a graceful shutdown (ADR 0022 Q8).
@@ -304,7 +354,8 @@ mod tests {
                 child: spawn_nothing(),
             },
         };
-        let ready = booting.on_handshake_ok();
+        let conn = test_conn_triple().await;
+        let ready = booting.on_handshake_ok(conn);
         assert_eq!(
             ready.missed_pongs, 0,
             "miss count resets on successful handshake"
@@ -336,9 +387,7 @@ mod tests {
     #[tokio::test]
     async fn ready_to_hung_after_3_misses() {
         let mut ready = Ready {
-            process: HostProcess {
-                child: spawn_nothing(),
-            },
+            conn: test_conn_triple().await,
             missed_pongs: 0,
         };
         ready = ready.on_pong_missed();
@@ -347,19 +396,19 @@ mod tests {
         assert!(!ready.is_hung(), "2 misses are not hung");
         ready = ready.on_pong_missed();
         assert!(ready.is_hung(), "3 misses is hung");
-        let _hung = ready.on_hung();
+        let (_hung, conn) = ready.into_hung();
+        conn.shutdown().await;
     }
 
     #[tokio::test]
     async fn ready_pong_resets_miss_count() {
         let ready = Ready {
-            process: HostProcess {
-                child: spawn_nothing(),
-            },
+            conn: test_conn_triple().await,
             missed_pongs: 2,
         };
         let ready = ready.on_pong();
         assert_eq!(ready.missed_pongs, 0, "Pong resets the miss count");
+        ready.conn.shutdown().await;
     }
 
     #[test]
@@ -405,5 +454,32 @@ mod tests {
         // state-struct tests. Drop kills it.
         let mut cmd = tokio::process::Command::new("true");
         cmd.spawn().expect("spawn true")
+    }
+
+    /// A ConnTriple for testing state transitions. Spawns a connection task
+    /// over a real UDS pair (the connection task expects a UnixStream).
+    /// The task exits immediately when the downstream channel closes.
+    async fn test_conn_triple() -> ConnTriple {
+        use tokio::net::UnixListener;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        let _client = tokio::net::UnixStream::connect(&path).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+        let (upstream_tx, upstream_rx) = mpsc::channel(8);
+        let (downstream_tx, downstream_rx) = mpsc::channel(8);
+        let conn_task = tokio::spawn(crate::host_connection::run_connection(
+            server,
+            upstream_tx,
+            downstream_rx,
+        ));
+        // Leak the dir so the socket file survives; cleaned up on test exit.
+        std::mem::forget(dir);
+        ConnTriple {
+            upstream: upstream_rx,
+            downstream: downstream_tx,
+            conn_task,
+            child: spawn_nothing(),
+        }
     }
 }
