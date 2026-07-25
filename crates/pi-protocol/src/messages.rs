@@ -156,7 +156,7 @@ mod wire {
     //! Manual serde impl for `Message` producing the ADR 0022 Q5 envelope:
     //! a msgpack map with "type" = variant name, then the variant's fields.
     //! rmp-serde ignores `#[serde(tag)]`, so this is hand-rolled.
-    use super::*;
+    use super::Message;
     use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
 
     impl Serialize for Message {
