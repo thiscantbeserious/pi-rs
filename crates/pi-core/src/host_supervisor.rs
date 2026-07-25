@@ -20,7 +20,7 @@ use std::time::Duration;
 use pi_protocol::{EchoResponse, Message, ProtocolError, ProtocolErrorCode};
 use tokio::net::UnixListener;
 use tokio::process::Command;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{interval, Instant};
 
 use crate::host_connection::run_connection;
@@ -54,22 +54,41 @@ pub struct SupervisorConfig {
 /// The host supervisor. Construct with `new`, run with `run`.
 pub struct HostSupervisor {
     config: SupervisorConfig,
+    /// A signal the caller fires to trigger /reload. The ready_phase's select!
+    /// listens on this; when it fires, the supervisor sends Shutdown{drain:true},
+    /// waits for ShutdownAck, and transitions to Stopped -> respawn.
+    reload_signal: Option<oneshot::Receiver<()>>,
 }
 
 impl HostSupervisor {
     pub fn new(config: SupervisorConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            reload_signal: None,
+        }
+    }
+
+    /// Set the reload signal. The returned sender triggers /reload when fired.
+    /// The supervisor's ready_phase listens on the receiver.
+    pub fn with_reload(mut self, reload_signal: oneshot::Receiver<()>) -> Self {
+        self.reload_signal = Some(reload_signal);
+        self
     }
 
     /// Run the supervisor loop. Returns when the host reaches a terminal
     /// Stopped state (after AbortTurn, or a fatal bind error).
-    pub async fn run(self) -> std::io::Result<()> {
+    pub async fn run(mut self) -> std::io::Result<()> {
         let listener = UnixListener::bind(&self.config.socket_path)?;
         let mut state = HostState::stopped();
         let mut crash_count: u32 = 0;
 
         loop {
-            state = self.transition(state, &mut crash_count, &listener).await?;
+            // Take the reload signal: it's only consumed once, on the first
+            // Ready transition. After that it's None.
+            let reload = self.reload_signal.take();
+            state = self
+                .transition(state, &mut crash_count, &listener, reload)
+                .await?;
             if matches!(state, HostState::Stopped(_)) {
                 break;
             }
@@ -79,14 +98,12 @@ impl HostSupervisor {
         Ok(())
     }
 
-    /// Transition from one state to the next. Each arm does the I/O for that
-    /// state and returns the next state. Extracted from `run()` to keep
-    /// cognitive complexity under the Sonar limit (15).
     async fn transition(
         &self,
         state: HostState,
         crash_count: &mut u32,
         listener: &UnixListener,
+        reload_signal: Option<oneshot::Receiver<()>>,
     ) -> std::io::Result<HostState> {
         match state {
             HostState::Stopped(_) => self.transition_from_stopped().await,
@@ -94,7 +111,10 @@ impl HostSupervisor {
                 self.transition_from_booting(listener, booting, crash_count)
                     .await
             }
-            HostState::Ready(ready) => self.transition_from_ready(ready, crash_count).await,
+            HostState::Ready(ready) => {
+                self.transition_from_ready(ready, crash_count, reload_signal)
+                    .await
+            }
             HostState::Hung(_) => Ok(self.transition_from_hung()),
             HostState::Draining(drain) => self.transition_from_draining(drain, crash_count).await,
             HostState::BackingOff(bo) => self.transition_from_backing_off(bo).await,
@@ -135,8 +155,9 @@ impl HostSupervisor {
         &self,
         ready: crate::host_state::Ready,
         crash_count: &mut u32,
+        reload_signal: Option<oneshot::Receiver<()>>,
     ) -> std::io::Result<HostState> {
-        match self.ready_phase(ready).await? {
+        match self.ready_phase(ready, reload_signal).await? {
             ReadyResult::Hung(backoff) => {
                 Ok(HostState::Reconnecting(crate::host_state::Reconnecting {
                     deadline: Instant::now() + backoff,
@@ -292,6 +313,7 @@ impl HostSupervisor {
     async fn ready_phase(
         &self,
         mut ready: crate::host_state::Ready,
+        mut reload_signal: Option<oneshot::Receiver<()>>,
     ) -> std::io::Result<ReadyResult> {
         let mut heartbeat = interval(self.config.heartbeat_interval);
         heartbeat.reset();
@@ -331,8 +353,34 @@ impl HostSupervisor {
                             }};
                             let _ = ready.conn.downstream.send(resp).await;
                         }
+                        // ShutdownAck from the host: graceful drain complete.
+                        Some(Message::ShutdownAck) => {
+                            break ReadyResult::Drained;
+                        }
                         Some(_) => {}
                         None => break ReadyResult::ConnectionLost,
+                    }
+                }
+                // /reload signal: send Shutdown{drain:true}, wait for
+                // ShutdownAck, then transition to Drained (ADR 0017).
+                _ = async {
+                    if let Some(ref mut rx) = reload_signal {
+                        let _ = rx.await;
+                    } else {
+                        // No reload signal: park forever so this branch is
+                        // never selected when there's no signal.
+                        std::future::pending::<()>().await;
+                    }
+                } => {
+                    // Send Shutdown{drain:true} (ADR 0022 Q8).
+                    let shutdown = Message::Shutdown { inner: pi_protocol::Shutdown { drain: true } };
+                    if ready.conn.downstream.send(shutdown).await.is_err() {
+                        break ReadyResult::ConnectionLost;
+                    }
+                    // Wait for ShutdownAck.
+                    match ready.conn.upstream.recv().await {
+                        Some(Message::ShutdownAck) => break ReadyResult::Drained,
+                        _ => break ReadyResult::ConnectionLost,
                     }
                 }
                 _ = ready.conn.child.wait() => break ReadyResult::ConnectionLost,
@@ -399,7 +447,6 @@ async fn kill_boot_child(
 
 enum ReadyResult {
     Hung(Duration),
-    #[allow(dead_code)]
     Drained,
     ConnectionLost,
 }

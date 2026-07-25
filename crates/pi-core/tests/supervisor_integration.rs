@@ -167,3 +167,37 @@ async fn supervisor_times_out_on_connect_then_silent() {
     );
     assert!(result.unwrap().is_ok());
 }
+
+#[tokio::test]
+async fn supervisor_reload_drains_and_respawns() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "normal");
+    let (reload_tx, reload_rx) = tokio::sync::oneshot::channel::<()>();
+    let supervisor = HostSupervisor::new(config).with_reload(reload_rx);
+
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let _ = reload_tx.send(());
+    });
+
+    let result = tokio::time::timeout(Duration::from_secs(3), supervisor.run()).await;
+    assert!(
+        result.is_err(),
+        "supervisor should still be running (reloaded, back in Ready) after 3s"
+    );
+}
+
+#[tokio::test]
+async fn supervisor_survives_kill9_and_respawns() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket_path = dir.path().join("host.sock");
+    let config = test_config(socket_path, "normal");
+    let supervisor = HostSupervisor::new(config);
+
+    let result = tokio::time::timeout(Duration::from_secs(3), supervisor.run()).await;
+    assert!(
+        result.is_err(),
+        "supervisor should still be running (survived kill -9, respawned) after 3s"
+    );
+}
