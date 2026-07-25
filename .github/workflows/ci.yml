@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "crates/**"
+      - "host/**"
       - "tests/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -37,6 +38,7 @@ jobs:
               - 'Cargo.lock'
             code:
               - 'crates/**'
+              - 'host/**'
               - 'tests/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
