@@ -315,8 +315,12 @@ jobs:
   cargo-deny:
     name: cargo-deny (P16)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2

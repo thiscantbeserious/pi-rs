@@ -29,11 +29,11 @@ pub struct TerminalGuard {
 
 impl Session {
     /// Enter the terminal session: alt screen, raw mode, mouse capture, kitty
-    /// keyboard flags. Returns a guard that restores on drop.
+    /// keyboard flags. Returns a guard that restores on drop. Writes to real
+    /// stdout and enables raw mode on the real fd.
     pub fn enter() -> io::Result<TerminalGuard> {
-        // Real stdout enter. Tests exercise `enter_to`.
         let mut guard = Self::enter_to(&mut io::stdout(), false)?;
-        // Raw mode is termios, not ANSI; applied on the real fd.
+        crossterm::terminal::enable_raw_mode()?;
         guard.raw_mode_enabled = true;
         Ok(guard)
     }
@@ -66,6 +66,7 @@ impl Session {
 impl TerminalGuard {
     /// Write the restore sequence to `w`. Idempotent: a second call is a
     /// no-op. Safe to call from a panic hook (no allocation, no panics).
+    /// If raw mode was enabled, disables it (on the real fd, not `w`).
     pub fn restore_to<W: Write>(&mut self, w: &mut W) -> io::Result<()> {
         if self.restored {
             return Ok(());
@@ -73,6 +74,9 @@ impl TerminalGuard {
         crossterm::queue!(w, LeaveAlternateScreen, DisableMouseCapture,)?;
         if self.kitty_pushed {
             crossterm::queue!(w, PopKeyboardEnhancementFlags)?;
+        }
+        if self.raw_mode_enabled {
+            crossterm::terminal::disable_raw_mode()?;
         }
         self.restored = true;
         Ok(())
@@ -88,7 +92,11 @@ impl TerminalGuard {
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
-        let _ = self.restore_to(&mut io::sink());
+        // Restore to real stdout (not io::sink) so the actual terminal is
+        // left clean on drop (P15). The test seams (enter_to/restore_to)
+        // exercise the ANSI sequences with a buffer; the real path goes
+        // through stdout.
+        let _ = self.restore_to(&mut io::stdout());
     }
 }
 
@@ -133,7 +141,7 @@ mod tests {
     /// P15: restore must leave the alt screen (ESC[?1049l).
     #[test]
     fn restore_leaves_alt_screen() {
-        let mut guard = Session::enter().unwrap();
+        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         let mut buf = Vec::new();
         guard.restore_to(&mut buf).unwrap();
         assert!(
@@ -197,7 +205,7 @@ mod tests {
     /// P15: restore must disable mouse capture.
     #[test]
     fn restore_disables_mouse_capture() {
-        let mut guard = Session::enter().unwrap();
+        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         let mut buf = Vec::new();
         guard.restore_to(&mut buf).unwrap();
         // DisableMouseCapture emits ?1006l ?1015l ?1003l ?1002l ?1000l.
@@ -213,7 +221,7 @@ mod tests {
     /// restore sequence a second time (a double-restore can corrupt state).
     #[test]
     fn restore_is_idempotent() {
-        let mut guard = Session::enter().unwrap();
+        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         let mut first = Vec::new();
         guard.restore_to(&mut first).unwrap();
         let mut second = Vec::new();
@@ -229,7 +237,7 @@ mod tests {
     /// pop them (ESC[<1u).
     #[test]
     fn restore_pops_kitty_flags_when_pushed() {
-        let mut guard = Session::enter().unwrap();
+        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         guard.kitty_pushed = true;
         let mut buf = Vec::new();
         guard.restore_to(&mut buf).unwrap();
@@ -245,7 +253,7 @@ mod tests {
     /// (popping an un-pushed stack corrupts kitty keyboard state).
     #[test]
     fn restore_skips_kitty_pop_when_not_pushed() {
-        let mut guard = Session::enter().unwrap();
+        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         guard.kitty_pushed = false;
         let mut buf = Vec::new();
         guard.restore_to(&mut buf).unwrap();

@@ -101,16 +101,16 @@ Ordered so the riskiest unknown retires first. Each step: write the failing test
 
 ## Tracked open item: first-class Core-owned intercom (future ADR)
 
-A first-class, Core-owned session intercom — sessions auto-discover each other and message without FS writes — is a pi-rs-native addition with **no pi equivalent**. The existing implementations are extension-level workarounds:
+A first-class, Core-owned session intercom (sessions auto-discover each other and message without FS writes) is a pi-rs-native addition with **no pi equivalent**. The existing implementations are extension-level workarounds:
 
-- `pi-intercom` (github.com/nicobailon/pi-intercom): a separate extension that spawns a standalone TypeScript broker process; sessions connect over a Unix socket (named pipe on Windows) with a length-prefixed JSON protocol; the broker routes 1:1 messages by session ID; `ask` blocks up to 10min; messages persist to Pi session history (FS). Config at `~/.pi/agent/intercom/config.json`.
-- `pi-subagents` native supervisor channel (no `pi-intercom` needed): `contact_supervisor` (child→parent, `need_decision`/`interview_request`/`progress_update`) and `subagent_supervisor({ action: "reply" })` (parent→child), scoped to the exact spawning session via `PI_SUBAGENT_PARENT_SESSION`. Exposes `intercom` as a fallback name if no external tool owns it.
+- `pi-intercom` [[26]](https://github.com/nicobailon/pi-intercom/blob/5caa4aa1/README.md): a separate extension that spawns a standalone TypeScript broker process. Sessions connect over a Unix socket (named pipe on Windows) with a length-prefixed JSON protocol. The broker routes 1:1 messages by session ID. `ask` blocks up to 10 min. Messages persist to Pi session history (FS). Config at `~/.pi/agent/intercom/config.json`.
+- `pi-subagents` native supervisor channel [[27]](https://github.com/nicobailon/pi-subagents/blob/main/README.md) (no `pi-intercom` needed): `contact_supervisor` (child to parent, `need_decision`/`interview_request`/`progress_update`) and `subagent_supervisor({ action: "reply" })` (parent to child), scoped to the exact spawning session via `PI_SUBAGENT_PARENT_SESSION`. Exposes `intercom` as a fallback name if no external tool owns it.
 
-Both are extension-level; neither has Core support. `pi.events` is in-process only and explicitly "does not reach separate Pi processes or child subagents" — cross-process coordination today requires the broker or the FS.
+Both are extension-level; neither has Core support. `pi.events` is in-process only and explicitly "does not reach separate Pi processes or child subagents" [[27]](https://github.com/nicobailon/pi-subagents/blob/main/README.md). Cross-process coordination today requires the broker or the FS.
 
-The owner's intent: make this a first-class citizen — the Core runtime maintains a session registry (live sessions by ID) and an in-process message bus (tokio mpsc/broadcast); sessions register on start and message without FS writes. Subagents spawned as headless children register back over their stdio/UDS. This is hard-to-reverse, shapes the Core's concurrency model (GOALS goal 2), and warrants a dedicated ADR + plan before implementation.
+The owner's intent: make this a first-class citizen. The Core runtime maintains a session registry (live sessions by ID) and an in-process message bus (tokio mpsc/broadcast). Sessions register on start and message without FS writes. Subagents spawned as headless children register back over their stdio/UDS. This is hard-to-reverse, shapes the Core's concurrency model (GOALS goal 2), and warrants a dedicated ADR + plan before implementation.
 
-**Status:** tracked here so it is not lost. Scoping deferred to a dedicated session (research the broker-vs-Core-registry trade-off, the message-bus topology, the auto-discovery mechanism, and the relationship to ADR 0018's "Core is designed subagent-aware"). Not a Phase 2 blocker — the render thread and RMM do not depend on it.
+**Status:** tracked here so it is not lost. Scoping deferred to a dedicated session (research the broker-vs-Core-registry trade-off, the message-bus topology, the auto-discovery mechanism, and the relationship to ADR 0018's "Core is designed subagent-aware"). Not a Phase 2 blocker; the render thread and RMM do not depend on it.
 
 ## Explicitly out (ROADMAP Phase 2)
 
@@ -147,3 +147,5 @@ Agent loop, providers, extension execution (host frame buffers may be faked). Th
 23. `pulldown-cmark`, CommonMark-compliant parser (ADR 0010 structure layer): <https://github.com/pulldown-cmark/pulldown-cmark>
 24. tree-sitter, incremental and error-tolerant parsing (ADR 0010 highlight engine): <https://github.com/tree-sitter/tree-sitter>
 25. Criterion, Rust benchmarking crate: <https://docs.rs/criterion>
+26. `pi-intercom` README, the broker-based 1:1 inter-session messaging extension: <https://github.com/nicobailon/pi-intercom/blob/5caa4aa1/README.md>
+27. `pi-subagents` README, native supervisor channel and `pi.events` in-process limitation: <https://github.com/nicobailon/pi-subagents/blob/main/README.md>
