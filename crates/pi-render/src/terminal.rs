@@ -92,6 +92,13 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// P15: a zero-size terminal (0 cols or 0 rows) panics naive renderers. The
+/// resize handler checks this before drawing. Returns true only when both
+/// dimensions are non-zero.
+pub fn is_drawable_size(cols: u16, rows: u16) -> bool {
+    cols > 0 && rows > 0
+}
+
 /// Install the terminal-restore panic hook (P15, P3). The hook calls `restore`
 /// before the previous hook, so the terminal is left clean (alt screen off,
 /// raw mode off, kitty flags popped) before the backtrace prints. Must be
@@ -270,5 +277,20 @@ mod tests {
             called.load(Ordering::SeqCst),
             "panic hook must call restore on panic"
         );
+    }
+
+    /// P15: a zero-size terminal must not be drawable (naive renderers panic).
+    #[test]
+    fn zero_size_terminal_is_not_drawable() {
+        assert!(!is_drawable_size(0, 0), "0x0 must not be drawable");
+        assert!(!is_drawable_size(80, 0), "80x0 must not be drawable");
+        assert!(!is_drawable_size(0, 24), "0x24 must not be drawable");
+    }
+
+    /// P15: a non-zero terminal is drawable.
+    #[test]
+    fn non_zero_terminal_is_drawable() {
+        assert!(is_drawable_size(1, 1), "1x1 must be drawable");
+        assert!(is_drawable_size(80, 24), "80x24 must be drawable");
     }
 }
