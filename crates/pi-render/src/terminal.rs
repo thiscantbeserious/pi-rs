@@ -63,16 +63,17 @@ impl Session {
     /// Testable seam: writes only ANSI to `w`; raw mode is the caller's
     /// concern (termios, not ANSI-emittable).
     pub fn enter_to<W: Write>(w: &mut W, push_kitty: bool) -> io::Result<TerminalGuard> {
-        use crossterm::event::EnableMouseCapture;
+        use crossterm::event::{EnableMouseCapture, PushKeyboardEnhancementFlags};
         use crossterm::terminal::EnterAlternateScreen;
 
         crossterm::queue!(w, EnterAlternateScreen, EnableMouseCapture)?;
         if push_kitty {
-            // Kitty keyboard push: CSI > {flags} u. DISAMBIGUATE_ESCAPE_CODES
-            // is bit 0 = 1, so the sequence is ESC[>1u. Written directly
-            // (not via crossterm::queue! macro) because the macro's generic-
-            // type expansion isn't tracked by tarpaulin.
-            w.write_all(b"\x1b[>1u")?;
+            crossterm::queue!(
+                w,
+                PushKeyboardEnhancementFlags(
+                    crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,
+                )
+            )?;
         }
         Ok(TerminalGuard {
             restored: false,
