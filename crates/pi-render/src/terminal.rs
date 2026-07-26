@@ -92,8 +92,35 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// Install the terminal-restore panic hook (P15, P3). The hook calls `restore`
+/// before the previous hook, so the terminal is left clean (alt screen off,
+/// raw mode off, kitty flags popped) before the backtrace prints. Must be
+/// installed before the first draw.
+///
+/// `restore` must be `Send + Sync + 'static` because panic hooks are global.
+/// The render thread typically passes a closure that restores its own
+/// `TerminalGuard` to real stdout.
+pub fn install_panic_hook<F>(restore: F)
+where
+    F: Fn() + Send + Sync + 'static,
+{
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // Restore the terminal first (P15): the backtrace must print to a
+        // clean terminal, not the alt screen.
+        restore();
+        prev(info);
+    }));
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    /// Serializes tests that touch the global panic hook (set_hook/take_hook
+    /// are process-global; without this, parallel tests race on the hook).
+    static PANIC_HOOK_MUTEX: Mutex<()> = Mutex::new(());
     use super::*;
 
     /// P15: restore must leave the alt screen (ESC[?1049l).
@@ -219,6 +246,29 @@ mod tests {
             !buf.windows(b"\x1b[<1u".len()).any(|w| w == b"\x1b[<1u"),
             "restore must NOT emit PopKeyboardEnhancementFlags when kitty was not pushed, got {:?}",
             String::from_utf8_lossy(&buf)
+        );
+    }
+
+    /// P15: the panic hook must call restore before the previous hook, so the
+    /// terminal is clean before the backtrace prints.
+    #[test]
+    fn panic_hook_calls_restore_on_panic() {
+        let _lock = PANIC_HOOK_MUTEX.lock().unwrap();
+        let called = Arc::new(AtomicBool::new(false));
+        let called_clone = called.clone();
+
+        let prev = std::panic::take_hook();
+        install_panic_hook(move || {
+            called_clone.store(true, Ordering::SeqCst);
+        });
+
+        let _ = std::panic::catch_unwind(|| panic!("test panic for hook"));
+
+        std::panic::set_hook(prev);
+
+        assert!(
+            called.load(Ordering::SeqCst),
+            "panic hook must call restore on panic"
         );
     }
 }
