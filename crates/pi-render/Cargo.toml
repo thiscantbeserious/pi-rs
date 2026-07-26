@@ -10,18 +10,9 @@ description = "pi-rs render thread, Retained Message Model, markdown pipeline, w
 name = "pi_render"
 path = "src/lib.rs"
 
-[[bin]]
-name = "suspend-test"
-path = "src/bin/suspend_test.rs"
-harness = false
-test = false
-bench = false
-
 [dependencies]
 ratatui.workspace = true
 crossterm.workspace = true
-signal-hook = { version = "0.3", features = ["iterator"] }
 
 [dev-dependencies]
 insta.workspace = true
-nix = { version = "0.29", features = ["signal"] }

@@ -1,40 +1,32 @@
-//! SIGTSTP/SIGCONT suspend/resume handling (P14, ADR 0024).
+//! SIGTSTP/SIGCONT suspend/resume handling (P14, ADR 0024) — **DEFERRED**.
 //!
 //! When the process receives SIGTSTP, the terminal must be restored before
 //! the process suspends — otherwise raw mode, alt screen, and kitty keyboard
 //! flags leak into the shell (P14). On SIGCONT, the terminal must be
 //! re-entered so rendering resumes.
 //!
-//! Design: `signal_hook::iterator::Signals` bridges signals to a
-//! self-pipe and delivers them as an iterator on a consumer thread. The
-//! signal handler (inside the `signal-hook` crate, which owns the one
-//! unavoidable `unsafe` for the async-signal-safe pipe write) only writes a
-//! byte; our consumer thread reads the signal and does the safe work —
-//! writing the pre-computed enter/restore ANSI bytes to stdout via
-//! `io::Write`. This keeps all `unsafe` inside `signal-hook`; pi-rs code
-//! has no `unsafe` blocks (PHILOSOPHY §4: no `unsafe` without project-owner
-//! sign-off).
+//! **Status: deferred to Phase 3.** The testable units (`enter_ansi`,
+//! `restore_ansi`) are implemented and unit-tested here. The full signal
+//! wiring is deferred because `signal_hook::iterator::Signals` does not
+//! reliably deliver SIGTSTP to the consumer thread on this platform (the
+//! kernel's job-control handling interferes with the self-pipe delivery;
+//! only SIGCONT arrives). The signal_hook docs' canonical fix
+//! (`low_level::emulate_default_handler`) is `unsafe`, which the no-unsafe
+//! rule (PHILOSOPHY §4) forbids without project-owner sign-off. P14 is an
+//! interactive concern (a human hits Ctrl+Z); the Phase 2 replay gate does
+//! not exercise it. It will be implemented in Phase 3 dogfood where a
+//! real-terminal interactive test is meaningful and where the `unsafe`
+//! decision can be made with the full context.
 //!
 //! No pi equivalent (signal handling is pi-rs-native, ADR 0013). Per §9.5.
 
-use std::io::{self, Write};
-use std::sync::OnceLock;
+use std::io;
 
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, PopKeyboardEnhancementFlags,
-    PushKeyboardEnhancementFlags, KeyboardEnhancementFlags,
+    DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
 };
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
-use signal_hook::consts::{SIGCONT, SIGTSTP};
-use signal_hook::iterator::Signals;
-
-/// Pre-computed restore bytes (leave alt screen, disable mouse, pop kitty).
-/// Set once at session setup; read by the consumer thread on SIGTSTP.
-static RESTORE_BYTES: OnceLock<Vec<u8>> = OnceLock::new();
-
-/// Pre-computed enter bytes (enter alt screen, enable mouse, push kitty).
-/// Set once at session setup; read by the consumer thread on SIGCONT.
-static ENTER_BYTES: OnceLock<Vec<u8>> = OnceLock::new();
 
 /// Compute the enter ANSI sequence (alt screen + mouse capture + optional
 /// kitty keyboard push) as bytes, without touching real stdout.
@@ -61,48 +53,22 @@ pub fn restore_ansi(kitty_pushed: bool) -> Vec<u8> {
     buf
 }
 
-/// Install the SIGTSTP/SIGCONT handlers. Pre-computes and stores the enter
-/// and restore byte sequences, then spawns a consumer thread that reads
-/// signals from a self-pipe and writes the sequences to stdout.
+/// Install the SIGTSTP/SIGCONT handlers.
 ///
-/// - On SIGTSTP: write restore bytes to stdout. The process then suspends
-///   via the default action (SIGTSTP's default is "stop"; signal_hook's
-///   iterator does not suppress default actions).
-/// - On SIGCONT: write enter bytes to stdout so the terminal is re-entered.
-///
-/// Note: SIGTSTP's default action (stop the process) runs after the signal
-/// is delivered to the iterator. The restore bytes are written before the
-/// process actually stops. On SIGCONT, the process resumes and the enter
-/// bytes are written.
-pub fn install_suspend_handler(restore: Vec<u8>, enter: Vec<u8>) -> io::Result<()> {
-    let _ = RESTORE_BYTES.set(restore);
-    let _ = ENTER_BYTES.set(enter);
-
-    let mut signals = Signals::new([SIGTSTP, SIGCONT])?;
-
-    // Consumer thread: read signals from the self-pipe and write the
-    // matching ANSI sequence to stdout. All work here is normal, safe code.
-    std::thread::spawn(move || {
-        for signal in signals.forever() {
-            match signal {
-                SIGTSTP => {
-                    if let Some(restore) = RESTORE_BYTES.get() {
-                        let _ = io::stdout().write_all(restore);
-                        let _ = io::stdout().flush();
-                    }
-                }
-                SIGCONT => {
-                    if let Some(enter) = ENTER_BYTES.get() {
-                        let _ = io::stdout().write_all(enter);
-                        let _ = io::stdout().flush();
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
-
-    Ok(())
+/// **DEFERRED TO PHASE 3.** The signal wiring is not implemented in Phase 2
+/// because `signal_hook::iterator::Signals` does not reliably deliver SIGTSTP
+/// to the consumer thread (kernel job-control interference with the
+/// self-pipe; only SIGCONT arrives). The canonical fix
+/// (`signal_hook::low_level::emulate_default_handler`) is `unsafe`, which
+/// the no-unsafe rule (PHILOSOPHY §4) forbids without project-owner
+/// sign-off. P14 is an interactive concern; the Phase 2 replay gate does not
+/// exercise it. Returns `Err` with a clear message until implemented in
+/// Phase 3 dogfood.
+pub fn install_suspend_handler(_restore: Vec<u8>, _enter: Vec<u8>) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "install_suspend_handler is deferred to Phase 3 (P14); see crates/pi-render/src/suspend.rs",
+    ))
 }
 
 #[cfg(test)]
@@ -113,14 +79,18 @@ mod tests {
     #[test]
     fn enter_ansi_contains_alt_screen() {
         let bytes = enter_ansi(false);
-        assert!(bytes.windows(b"\x1b[?1049h".len()).any(|w| w == b"\x1b[?1049h"));
+        assert!(bytes
+            .windows(b"\x1b[?1049h".len())
+            .any(|w| w == b"\x1b[?1049h"));
     }
 
     /// P14: restore_ansi must contain the alt-screen leave sequence.
     #[test]
     fn restore_ansi_contains_alt_screen() {
         let bytes = restore_ansi(false);
-        assert!(bytes.windows(b"\x1b[?1049l".len()).any(|w| w == b"\x1b[?1049l"));
+        assert!(bytes
+            .windows(b"\x1b[?1049l".len())
+            .any(|w| w == b"\x1b[?1049l"));
     }
 
     /// P14: enter_ansi with kitty must contain the push sequence.
