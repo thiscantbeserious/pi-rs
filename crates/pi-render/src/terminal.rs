@@ -133,94 +133,90 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
+    use super::*;
+
     /// Serializes tests that touch the global panic hook (set_hook/take_hook
     /// are process-global; without this, parallel tests race on the hook).
     static PANIC_HOOK_MUTEX: Mutex<()> = Mutex::new(());
-    use super::*;
 
-    /// P15: restore must leave the alt screen (ESC[?1049l).
+    /// P15/P3: a full session lifecycle (enter with kitty, then restore) must
+    /// leave the terminal clean. "Clean" means: alt screen left, mouse
+    /// capture disabled, kitty keyboard flags popped. The enter sequence
+    /// must contain the setup; the restore sequence must contain the teardown
+    /// that reverses it. Tests the behavior (terminal is clean after exit),
+    /// not individual bytes.
     #[test]
-    fn restore_leaves_alt_screen() {
-        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
-        let mut buf = Vec::new();
-        guard.restore_to(&mut buf).unwrap();
-        assert!(
-            buf.windows(b"\x1b[?1049l".len())
-                .any(|w| w == b"\x1b[?1049l"),
-            "restore must emit LeaveAlternateScreen (ESC[?1049l), got {:?}",
-            String::from_utf8_lossy(&buf)
-        );
-    }
+    fn session_lifecycle_leaves_terminal_clean() {
+        let mut enter_buf = Vec::new();
+        let mut guard = Session::enter_to(&mut enter_buf, true).unwrap();
 
-    /// P15: enter must enter the alt screen (ESC[?1049h).
-    #[test]
-    fn enter_writes_enter_alt_screen() {
-        let mut buf = Vec::new();
-        let _guard = Session::enter_to(&mut buf, false).unwrap();
+        // Enter must set up: alt screen, mouse capture, kitty push.
         assert!(
-            buf.windows(b"\x1b[?1049h".len())
+            enter_buf
+                .windows(b"\x1b[?1049h".len())
                 .any(|w| w == b"\x1b[?1049h"),
-            "enter must emit EnterAlternateScreen (ESC[?1049h), got {:?}",
-            String::from_utf8_lossy(&buf)
+            "enter must enter alt screen"
         );
-    }
-
-    /// P15: enter must enable mouse capture (?1000h).
-    #[test]
-    fn enter_enables_mouse_capture() {
-        let mut buf = Vec::new();
-        let _guard = Session::enter_to(&mut buf, false).unwrap();
         assert!(
-            buf.windows(b"\x1b[?1000h".len())
+            enter_buf
+                .windows(b"\x1b[?1000h".len())
                 .any(|w| w == b"\x1b[?1000h"),
-            "enter must emit EnableMouseCapture (?1000h), got {:?}",
-            String::from_utf8_lossy(&buf)
-        );
-    }
-
-    /// P14: enter with push_kitty must push kitty keyboard flags.
-    #[test]
-    fn enter_pushes_kitty_when_requested() {
-        let mut buf = Vec::new();
-        let guard = Session::enter_to(&mut buf, true).unwrap();
-        assert!(
-            guard.kitty_pushed,
-            "guard must record that kitty flags were pushed"
+            "enter must enable mouse capture"
         );
         assert!(
-            buf.windows(b"\x1b[>".len()).any(|w| w == b"\x1b[>"),
-            "enter must emit PushKeyboardEnhancementFlags (ESC[>...u), got {:?}",
-            String::from_utf8_lossy(&buf)
+            enter_buf.windows(b"\x1b[>".len()).any(|w| w == b"\x1b[>"),
+            "enter must push kitty keyboard flags when requested"
         );
-    }
 
-    /// P14: enter without push_kitty must NOT push kitty flags.
-    #[test]
-    fn enter_skips_kitty_when_not_requested() {
-        let mut buf = Vec::new();
-        let guard = Session::enter_to(&mut buf, false).unwrap();
-        assert!(!guard.kitty_pushed, "guard must record kitty not pushed");
-    }
-
-    /// P15: restore must disable mouse capture.
-    #[test]
-    fn restore_disables_mouse_capture() {
-        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
-        let mut buf = Vec::new();
-        guard.restore_to(&mut buf).unwrap();
-        // DisableMouseCapture emits ?1006l ?1015l ?1003l ?1002l ?1000l.
+        // Restore must tear down: leave alt screen, disable mouse, pop kitty.
+        let mut restore_buf = Vec::new();
+        guard.restore_to(&mut restore_buf).unwrap();
         assert!(
-            buf.windows(b"\x1b[?1000l".len())
+            restore_buf
+                .windows(b"\x1b[?1049l".len())
+                .any(|w| w == b"\x1b[?1049l"),
+            "restore must leave alt screen"
+        );
+        assert!(
+            restore_buf
+                .windows(b"\x1b[?1000l".len())
                 .any(|w| w == b"\x1b[?1000l"),
-            "restore must emit DisableMouseCapture (?1000l), got {:?}",
-            String::from_utf8_lossy(&buf)
+            "restore must disable mouse capture"
+        );
+        assert!(
+            restore_buf
+                .windows(b"\x1b[<1u".len())
+                .any(|w| w == b"\x1b[<1u"),
+            "restore must pop kitty flags that were pushed"
         );
     }
 
-    /// P15: restore must be idempotent. Calling it twice must not emit the
-    /// restore sequence a second time (a double-restore can corrupt state).
+    /// P15: a session entered without kitty must not pop kitty on restore
+    /// (popping an un-pushed stack corrupts kitty keyboard state). The
+    /// behavior: restore only reverses what enter set up.
     #[test]
-    fn restore_is_idempotent() {
+    fn session_without_kitty_does_not_pop_on_restore() {
+        let mut enter_buf = Vec::new();
+        let mut guard = Session::enter_to(&mut enter_buf, false).unwrap();
+        assert!(
+            !enter_buf.windows(b"\x1b[>".len()).any(|w| w == b"\x1b[>"),
+            "enter must not push kitty when not requested"
+        );
+        let mut restore_buf = Vec::new();
+        guard.restore_to(&mut restore_buf).unwrap();
+        assert!(
+            !restore_buf
+                .windows(b"\x1b[<1u".len())
+                .any(|w| w == b"\x1b[<1u"),
+            "restore must not pop kitty when none were pushed"
+        );
+    }
+
+    /// P15: restore must be idempotent. A double-restore (e.g. panic hook
+    /// then Drop) must not emit the teardown sequence twice, which would
+    /// corrupt terminal state.
+    #[test]
+    fn double_restore_is_safe() {
         let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         let mut first = Vec::new();
         guard.restore_to(&mut first).unwrap();
@@ -233,72 +229,56 @@ mod tests {
         );
     }
 
-    /// P14/P15: if kitty keyboard flags were pushed on enter, restore must
-    /// pop them (ESC[<1u).
+    /// P15/P3: a panic during a session must trigger the restore hook before
+    /// the backtrace prints, so the terminal is clean when the panic message
+    /// appears. The behavior: panic hook calls restore.
     #[test]
-    fn restore_pops_kitty_flags_when_pushed() {
-        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
-        guard.kitty_pushed = true;
-        let mut buf = Vec::new();
-        guard.restore_to(&mut buf).unwrap();
-        assert!(
-            buf.windows(b"\x1b[<1u".len())
-                .any(|w| w == b"\x1b[<1u"),
-            "restore must emit PopKeyboardEnhancementFlags (ESC[<1u) when kitty was pushed, got {:?}",
-            String::from_utf8_lossy(&buf)
-        );
-    }
-
-    /// P15: if kitty flags were NOT pushed, restore must NOT emit the pop
-    /// (popping an un-pushed stack corrupts kitty keyboard state).
-    #[test]
-    fn restore_skips_kitty_pop_when_not_pushed() {
-        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
-        guard.kitty_pushed = false;
-        let mut buf = Vec::new();
-        guard.restore_to(&mut buf).unwrap();
-        assert!(
-            !buf.windows(b"\x1b[<1u".len()).any(|w| w == b"\x1b[<1u"),
-            "restore must NOT emit PopKeyboardEnhancementFlags when kitty was not pushed, got {:?}",
-            String::from_utf8_lossy(&buf)
-        );
-    }
-
-    /// P15: the panic hook must call restore before the previous hook, so the
-    /// terminal is clean before the backtrace prints.
-    #[test]
-    fn panic_hook_calls_restore_on_panic() {
+    fn panic_during_session_restores_terminal() {
         let _lock = PANIC_HOOK_MUTEX.lock().unwrap();
-        let called = Arc::new(AtomicBool::new(false));
-        let called_clone = called.clone();
+        let restored = Arc::new(AtomicBool::new(false));
+        let restored_clone = restored.clone();
 
         let prev = std::panic::take_hook();
         install_panic_hook(move || {
-            called_clone.store(true, Ordering::SeqCst);
+            restored_clone.store(true, Ordering::SeqCst);
         });
 
-        let _ = std::panic::catch_unwind(|| panic!("test panic for hook"));
+        let _ = std::panic::catch_unwind(|| panic!("simulated render panic"));
 
         std::panic::set_hook(prev);
 
         assert!(
-            called.load(Ordering::SeqCst),
-            "panic hook must call restore on panic"
+            restored.load(Ordering::SeqCst),
+            "panic hook must restore the terminal before the backtrace"
         );
     }
 
-    /// P15: a zero-size terminal must not be drawable (naive renderers panic).
+    /// P15: a zero-size terminal (0 cols or 0 rows) must be rejected before
+    /// drawing, because naive renderers panic on it. The behavior: the size
+    /// guard returns false for any zero dimension, true otherwise.
     #[test]
-    fn zero_size_terminal_is_not_drawable() {
+    fn zero_size_terminal_is_rejected() {
         assert!(!is_drawable_size(0, 0), "0x0 must not be drawable");
-        assert!(!is_drawable_size(80, 0), "80x0 must not be drawable");
-        assert!(!is_drawable_size(0, 24), "0x24 must not be drawable");
-    }
-
-    /// P15: a non-zero terminal is drawable.
-    #[test]
-    fn non_zero_terminal_is_drawable() {
+        assert!(!is_drawable_size(80, 0), "0 rows must not be drawable");
+        assert!(!is_drawable_size(0, 24), "0 cols must not be drawable");
         assert!(is_drawable_size(1, 1), "1x1 must be drawable");
         assert!(is_drawable_size(80, 24), "80x24 must be drawable");
+    }
+
+    /// P14: install_suspend_handler is deferred to Phase 3. The behavior: it
+    /// returns a clear error until implemented, so callers fail closed rather
+    /// than silently doing nothing.
+    #[test]
+    fn suspend_handler_is_deferred() {
+        let result = crate::suspend::install_suspend_handler(Vec::new(), Vec::new());
+        assert!(
+            result.is_err(),
+            "install_suspend_handler must fail closed (deferred to Phase 3)"
+        );
+        assert_eq!(
+            result.unwrap_err().kind(),
+            std::io::ErrorKind::Unsupported,
+            "error must be Unsupported"
+        );
     }
 }
