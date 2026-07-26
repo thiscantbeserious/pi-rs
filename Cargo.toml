@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/pi-core",
   "crates/pi-protocol",
+  "crates/pi-render",
   "crates/pi-replay",
   "crates/pi-rs",
   "crates/pi-session",
@@ -19,8 +20,14 @@ authors = ["pi-rs contributors"]
 # Crates depend on each other via the workspace table so versions stay unified.
 pi-core = { path = "crates/pi-core" }
 pi-protocol = { path = "crates/pi-protocol" }
+pi-render = { path = "crates/pi-render" }
 pi-replay = { path = "crates/pi-replay" }
 pi-session = { path = "crates/pi-session" }
+
+# Render-thread deps (ADR 0024/0026). Workspace-unified so the P16
+# duplicate-version guard (cargo deny) holds across crates.
+ratatui = "0.30"
+crossterm = "0.29"
 
 # Shared dependencies, referenced by crates as `insta.workspace = true` so
 # versions stay unified across the workspace (pitfall P16 guard starts here).

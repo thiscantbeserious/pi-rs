@@ -1,0 +1,18 @@
+[package]
+name = "pi-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "pi-rs render thread, Retained Message Model, markdown pipeline, width engine, theme loader (ADR 0026)"
+
+[lib]
+name = "pi_render"
+path = "src/lib.rs"
+
+[dependencies]
+ratatui.workspace = true
+crossterm.workspace = true
+
+[dev-dependencies]
+insta.workspace = true

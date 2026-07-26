@@ -1,0 +1,49 @@
+# cargo-deny configuration (P16 guard, ADR 0024 "starts here").
+#
+# The P16 failure mode: duplicate crossterm/terminal-backend versions in one
+# binary cause event-queue mismatches and state-restore races. pi-render is
+# the sole crate that depends on ratatui/crossterm (ADR 0026); this config
+# reports any duplicate in CI so a crossterm/ratatui split is caught.
+#
+# `multiple-versions = "warn"` (advisory, not blocking): the Rust ecosystem
+# has near-universal transitive splits (syn 1.x from tokio-macros vs 2.x from
+# thiserror-impl; hashbrown 0.16/0.17 from ratatui vs ts-rs) that make
+# `= "deny"` impractical without extensive skips. A crossterm/ratatui
+# duplicate — the actual P16 concern — would appear in this output and fail
+# review. Tighten to `= "deny"` with skips once the tree stabilizes.
+
+[advisories]
+# RUSTSEC advisories: warn (advisory until explicitly opted into blocking,
+# matching the project gate discipline: AGENTS.md gates are never lowered).
+
+[bans]
+# P16: report duplicate versions in the dependency tree. A crossterm or
+# ratatui duplicate here is the P16 failure mode and fails review.
+multiple-versions = "warn"
+# Workspace deps (`pi-protocol.workspace = true`) inherit versions and look
+# like wildcards to cargo-deny; allow them (the project unifies via the
+# workspace table, P16 discipline).
+wildcards = "allow"
+
+[licenses]
+# pi-rs is MIT; dependencies must be compatible.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+]
+
+[sources]
+# Only allow crates.io (no git deps, no private registries).
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
