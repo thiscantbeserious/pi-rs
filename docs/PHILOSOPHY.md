@@ -21,7 +21,7 @@ The Rust discipline here is type-driven correctness: parse, don't validate. Data
 - Protocol messages are typed once in pi-protocol and generated outward, drift is a compile error (ADR 0011)
 - State machines (host lifecycle, hook verdicts, focus ownership) use typestate-style APIs where transitions that must not happen do not compile [[3]](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
 - Public APIs follow the Rust API Guidelines [[7]](https://rust-lang.github.io/api-guidelines/)
-- unsafe is justified only by FFI, a novel abstraction, or measured performance need, always with a documented invariant [[8]](https://microsoft.github.io/rust-guidelines/)
+- **No `unsafe` in pi-rs code, ever, unless there is no safe alternative AND the project owner decides on that specific case.** This overrides the prior FFI/novel-abstraction/perf allowance. Every `unsafe` block is a project-owner decision, recorded in the PR with the invariant it upholds. A PR that adds `unsafe` without that sign-off does not merge [[8]](https://microsoft.github.io/rust-guidelines/)
 
 ## 5. Code rules (carried from agent-session-recorder, proven in production)
 

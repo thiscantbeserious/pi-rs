@@ -952,7 +952,9 @@ version = "0.1.0-dev"
 dependencies = [
  "crossterm",
  "insta",
+ "nix",
  "ratatui",
+ "signal-hook",
 ]
 
 [[package]]
