@@ -1,0 +1,18 @@
+# Phase 2 render subsystem: a dedicated pi-render crate
+
+ADR 0011's workspace gains a sixth crate, `crates/pi-render`, holding the render thread, the Retained Message Model, the message-to-cell projection, the streaming markdown pipeline (ADR 0010), the grapheme-width engine (ADR 0025), and the theme/capture mapping (ADR 0012). This amends ADR 0011, which names `pi-core` as "TUI, renderer, agent loop" with the escape hatch "split into a separate crate if it blurs." The render subsystem's dependency graph is what blurs the boundary if it stays in `pi-core`: ratatui, crossterm, tree-sitter, `tree-sitter-highlight`, pulldown-cmark, the grammar crates, and the width crate would all land on `pi-core`'s `Cargo.toml`, and `pi-core`'s `mock-host` binary and host supervisor would link the entire render tree they never use. A dedicated crate makes ADR 0011's agent-loop-↔-renderer boundary (kept for headless mode, ADR 0018) structural via the dependency graph, not conventional via module visibility.
+
+## Considered Options
+
+- **Modules within `pi-core` (ADR 0011's stated home)** — rejected: fewer crates and a simpler workspace, but the render dependency tree lands on `mock-host` and the host supervisor, and the agent-loop-↔-renderer boundary is a convention, not a compile boundary. ADR 0011 itself flags this as the failure mode ("the agent loop must not depend on the renderer").
+- **Start as modules in `pi-core`, extract to `pi-render` when the agent loop lands in Phase 3 and the boundary actually blurs** — rejected: defers the crate-creation cost but pays an extraction cost later, and the dependency-isolation cost (mock-host linking ratatui + tree-sitter today) is concrete now, not future. YAGNI does not apply when ADR 0018 makes the headless path a confirmed requirement.
+
+## Consequences
+
+- **`pi-render` owns the Retained Message Model and the render-thread event types.** It does not depend on `pi-protocol` (the Host Protocol wire, ADR 0022); the agent loop translates host/extension events into `pi-render`'s `RenderEvent` enum. This keeps the render surface free of wire-format concerns and respects ADR 0011's "protocol is the wire, not the domain."
+- **`pi-replay` depends on `pi-render` + `pi-session`** to feed the Session Corpus through the renderer for the Phase 2 exit gate (20MB-class replay at full speed). `pi-replay` does not depend on `pi-core`.
+- **`pi-core` depends on `pi-render`** (it owns the render thread's lifecycle and the agent-loop-to-render channel) but `pi-render` does not depend on `pi-core`: the dependency points one way, so a headless `pi-core` build can omit `pi-render` without circular-dependency gymnastics.
+- **The `GraphemeWidth` trait (ADR 0025) and the markdown pipeline's grammar-feature table live in `pi-render`**, behind which the width crate and the per-language grammar crates sit. Swap is one impl, not a crate boundary change.
+- **Workspace dependency unification (pitfall P16) starts at the crate level**: `pi-render` is the sole crate that depends on ratatui/crossterm/tree-sitter/pulldown-cmark, so duplicate-version risk is localized and `cargo deny` checks are scoped. `pi-core` and `pi-protocol` stay render-free.
+- **The README mermaid diagram already separates the Render Thread subgraph from the tokio subgraph**; this ADR makes that separation a crate boundary. The diagram needs no structural change, only a label update from "pi-rs Core" to "pi-render" on the render subgraph nodes.
+- **ADR 0011's "pi-core (TUI, renderer, agent loop)" line is amended**: `pi-core` becomes "agent loop, host supervision, session writing, the render-thread lifecycle owner"; the renderer moves to `pi-render`.

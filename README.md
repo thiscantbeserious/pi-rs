@@ -34,20 +34,26 @@ flowchart TB
     piproto["pi-protocol crate - Host Protocol source of truth (ADR 0011)"]
     pisession["pi-session crate - pi session format types (ADR 0008, ADR 0011 amendment)"]
 
-    subgraph core["pi-rs Core - Rust binary (planned)"]
+    subgraph core["pi-rs Core - Rust binary (planned): agent loop, host supervision, session writing, render-thread lifecycle owner (ADR 0011, amended ADR 0026)"]
         direction TB
-        subgraph render["Render Thread - synchronous, never awaits (ADR 0013)"]
-            rmm["Retained Message Model, render-thread owned (ADR 0004/0013)"]
-            pipeline["Streaming markdown pipeline: pulldown-cmark + tree-sitter (ADR 0010)"]
-            diff["Cell diff + synchronized output"]
-            input["Input + focus routing (ADR 0003)"]
-        end
         subgraph tok["tokio runtime (ADR 0013)"]
             agentloop["Agent loop (renderer-independent, ADR 0018)"]
             providers["Native providers, 4 API types (ADR 0019)"]
             tools["Built-in tools: read edit write bash grep (ADR 0015)"]
             sessions["Session writer, sole (ADRs 0008/0016)"]
             lifecycle["Host supervision: spawn, heartbeat, restart, /reload (ADRs 0009/0017)"]
+        end
+    end
+
+    subgraph pirender["pi-render crate (ADR 0026): renderer + Retained Message Model + markdown pipeline + width engine + theme loader"]
+        direction TB
+        subgraph render["Render Thread - synchronous, never awaits (ADR 0013, ADR 0024)"]
+            rmm["Retained Message Model, render-thread owned (ADR 0004/0013)"]
+            projection["Message-to-cell projection + grapheme-cluster width (ADR 0025)"]
+            pipeline["Streaming markdown pipeline: pulldown-cmark + tree-sitter (ADR 0010)"]
+            diff["ratatui Buffer::diff + crossterm mode 2026 wrap (ADR 0024, P12)"]
+            input["Input + focus routing (ADR 0003)"]
+            themes["Theme loader: typed struct + capture mapping (ADR 0012/0020)"]
         end
     end
 
@@ -67,7 +73,8 @@ flowchart TB
 
     diff --> terminal
     terminal --> input
-    render <-->|"lock-free channels, events in / frames out"| tok
+    render <-->|"lock-free channels, RenderEvent in / frames out (ADR 0013)"| tok
+    core -->|"depends on (one-way)"| pirender
 
     tok <-->|"control plane: handshake, heartbeat, hook verdicts, appendEntry (msgpack over UDS, ADR 0006)"| runtime
     tok <-->|"data plane: frame buffers, custom provider stream, input events"| runtime
@@ -82,7 +89,7 @@ flowchart TB
 
     sessions -->|"write"| pitree
     pitree -->|"auth.json read + refresh"| providers
-    pitree -->|"themes"| render
+    pitree -->|"themes"| pirender
     pitree -->|"extensions"| runtime
 ```
 
@@ -111,6 +118,9 @@ flowchart TB
 - [ADR 0021](./docs/adr/0021-vendor-pi-runtime-as-deno-host.md): Vendor pi's extension runtime as the Deno Host, with a Rust protocol backend
 - [ADR 0022](./docs/adr/0022-phase-1-host-protocol-minimal-set-framing-lifecycle.md): Phase 1 Host Protocol minimal message set, framing, and lifecycle semantics
 - [ADR 0023](./docs/adr/0023-phase-1-host-lifecycle-state-machine-supervision-restart.md): Phase 1 host lifecycle state machine, supervision, and restart policy
+- [ADR 0024](./docs/adr/0024-terminal-backend-ratatui-on-crossterm.md): Terminal backend: ratatui on crossterm, mode 2026 wrapped by us, kitty keyboard via crossterm
+- [ADR 0025](./docs/adr/0025-projection-layer-grapheme-cluster-width.md): Projection-layer grapheme-cluster width (width not delegated to ratatui)
+- [ADR 0026](./docs/adr/0026-phase-2-render-subsystem-pi-render-crate.md): Phase 2 render subsystem: a dedicated pi-render crate (amends ADR 0011)
 
 ## Platform support (v1)
 

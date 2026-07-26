@@ -71,3 +71,75 @@ Stronger than web sources where they apply, per the sourced-facts rule:
 ## Terminal technique research - feeds docs/pitfalls.md P12–P16
 
 Synchronized-output support querying (`CSI ? 2026 $ p`), tmux buffering/leak behavior, grapheme-cluster width chaos, kitty keyboard protocol suspend edge cases, panic-restore discipline, crossterm version unification. See the pitfalls table for guards.
+
+## Terminal backend - ratatui on crossterm (ADR 0024) ✅ verified 2026-07-26
+
+Verified against current docs (find-docs/ctx7, not training data):
+
+- **crossterm exposes mode 2026 + kitty keyboard directly.** `SynchronizedUpdate`/`sync_update` wraps a block of writes in BSU/ESU ([crossterm event.rs](https://github.com/crossterm-rs/crossterm/blob/master/src/event.rs)). `PushKeyboardEnhancementFlags` pushes the kitty protocol flags (DISAMBIGUATE_ESCAPE_CODES, REPORT_EVENT_TYPES, REPORT_ALTERNATE_KEYS, REPORT_ALL_KEYS_AS_ESCAPE_CODES); supported terminals listed as kitty, foot, WezTerm, alacritty. `Event` enum covers Key (with kind/state for press/release), Mouse, Paste, Resize, FocusGained/Lost. No IME/preedit variant (a known limitation, not a Phase 2 blocker).
+- **ratatui's `Buffer::diff` is the cell-diff ADR 0004/P9 require**, with explicit multi-width handling: a double-width `コ` at index 0 skips index 1; a double-width at index 1 skips index 2 ([ratatui Buffer](https://docs.rs/ratatui/latest/ratatui/prelude/buffer/struct.Buffer.html)). `Terminal::flush` computes the diff and passes it to the backend's `draw`. `draw`/`flush`/`resize`/`autoresize` are synchronous `io::Result` (no `async`), so ADR 0013's render-thread-never-awaits holds.
+- **ratatui's `CellWidth` is `unicode-width`-based (per-codepoint)**, the P13 failure class, with no override hook and open ZWJ emoji bugs (#75, #925, #1332; PR #1089 improved truncation but did not fix the width mapping). Width is therefore owned at the projection layer (ADR 0025), not delegated to ratatui. `Terminal::backend_mut()` reaches the raw crossterm backend for direct commands (mode 2026 wrap, kitty keyboard).
+- **Codex failure class (P5 unstable scrollback, P7 platform-dependent rendering) is not inherited by adopting ratatui.** P5's guard is RMM-owned scroll state (a model property); P7's guard is the CI terminal matrix. Both are independent of the backend choice.
+
+## Grapheme-cluster width crate - runefix-core (ADR 0025) ✅ verified 2026-07-26
+
+July 2026 maintenance status verified per-crate against crates.io (not training data). The grapheme-aware width crate sits behind the `GraphemeWidth` trait (ADR 0025), so this choice is reversible in one impl.
+
+| Crate | Latest | Last activity | Unicode | Grapheme-aware? | crates.io? | Deps |
+| --- | --- | --- | --- | --- | --- | --- |
+| **runefix-core** (chosen) | 0.1.10 | 11 releases since May 2025 (active) | UAX#29 + curated emoji/CJK tables | YES (`graphemes()` + `atoms()`) | YES | zero |
+| unicode-display-width | 0.3.0 | Oct 2023 (~3y stale) | 15.1.0 | YES | YES | — |
+| unicode-width | 0.2.2 | ~Sept 2025 (active) | UAX#11 | NO (per-codepoint) | YES | zero |
+| grapheme-width-rs | n/a | Aug 2023 (~3y stale) | ~14 | YES | NO (unpublished, 6 stars) | ucd-tri |
+| widecharwidth (Helix) | generated | — | generated | NO (per-codepoint) | NO (vendored .rs) | zero |
+
+**Decision: `runefix-core`** ([crates.io](https://crates.io/crates/runefix-core), [docs](https://docs.rs/runefix-core)). It is the only option both grapheme-cluster-aware AND actively maintained. Purpose-built for terminal CLI alignment, Markdown table rendering, and TUI layout engines. Provides `graphemes()` (UAX #29 compliant) and `atoms()` (width-driven segmentation that groups ZWJ/VS with their base, optimized for TUI layout). Runtime `WidthPolicy` (terminal: emoji=2/CJK=2, markdown: emoji=1/CJK=2, compact: all=1). Reproducible tables from [char-table](https://github.com/runefix-labs/char-table). Width values {1, 2}. MSRV 1.85. MIT/Apache-2.0. Zero dependencies (no P16 risk).
+
+Honesty note (PHILOSOPHY §9): runefix-core is young (first release May 2025, 11 versions in 14 months, single author/org runefix-labs), not as battle-tested as unicode-width (19 versions since 2015, unicode-rs org). Chosen because it is the only crate that solves P13; the `GraphemeWidth` trait makes a swap one impl if it goes unmaintained. unicode-display-width is the fallback if runefix-core stalls (grapheme-aware but ~3y stale, Unicode 15.1.0).
+
+Rejected: every maintained per-codepoint option (unicode-width, widecharwidth) is the P13 failure class by design — widecharwidth's own README states "a wcwidth-style per-codepoint API is fundamentally limited when it comes to composing codepoints" ([widecharwidth](https://github.com/ridiculousfish/widecharwidth)). Helix uses widecharwidth + mode 2027 query and still has open emoji bugs (#6012, #15599). grapheme-width-rs is unpublished and stale.
+
+## Tree-sitter grammar bundling (ADR 0010) ✅ verified 2026-07-26
+
+Landscape verified July 2026. The bundling mechanism is reversible behind per-language Cargo features; the WASM fallback trigger (ROADMAP Phase 2) stays armed.
+
+- **`tree-sitter`** crate: incremental parsing (`parse` with `old_tree`), query cursors with `next_capture` (the highlight iteration path), queries from S-expressions. The engine ADR 0010 calls for.
+- **`tree-sitter-highlight`** (v0.25.4/0.26.9): the highlight layer. Takes a `HighlightConfiguration` (language + highlights query + injections + locals), a `highlight_names` array, produces styled captures. Maps onto the pi theme palette (ADR 0012).
+- **Bundling options surveyed:**
+  - Helix-style: compile grammars from source in `build.rs`, fetch separately. Battle-tested; binary size is real (Helix ~30 MiB, runtime grammars ~95 MiB extracted).
+  - `ae-tree-sitter-bundle` (v0.1.0, Jun 2026): single crate, per-language Cargo features, static compile. Matches research.md's prior default shape, but 1 month old with no adoption data (PHILOSOPHY §9 sourcing risk).
+  - `tree-sitter-natives`: monolithic, all official grammars, cross-platform static/shared archives. Heaviest.
+  - `tree-sitter-language-pack`: layered core crate + remote manifest download at runtime. Rejected: runtime network dependency, violates offline TUI (ADR 0014).
+  - Zed-style WASM: runtime loading, decouples grammar updates from binary. The armed fallback trigger, not the default.
+
+**Decision: static per-language grammar crates behind Cargo features** (`tree-sitter-rust`, `tree-sitter-javascript`, etc.), starting with a minimal daily-driver set (rust, TS/JS, bash, json) and expanding to the Oracle's grammar set once verified. `tree-sitter-highlight` as the highlight layer regardless of bundling. Measure binary/build size; fire the WASM fallback trigger only if measured bloat (per ROADMAP Phase 2 armed trigger). Uses established grammar crates with years of adoption; no runtime network; matches research.md default. `ae-tree-sitter-bundle` rejected as too new/unsourced.
+
+Open sub-item: the grammar set is a parity surface (which languages pi highlights). Needs an Oracle check against the pinned pi `v0.82.0` tree-sitter config before the set is finalized — a find-docs/librarian task, not a guess.
+
+## Phase 2 render-surface decisions (ADRs 0024–0026) ✅ grilled 2026-07-26
+
+Reversible implementation decisions settled in the Phase 2 grill. Recorded here per §9 rule 4 (research findings live in research.md); the hard-to-reverse architecture is in ADRs 0024–0026, the reversible crate/tool choices are here.
+
+### D-E: minimal seed message type — `RenderMessage` in `pi-render`
+
+`pi-session::SessionEntry::Message` carries `message: serde_json::Value` (opaque, per contract §10: "The message body is preserved as opaque JSON until `pi-messages` types land"). The Phase 2 exit gate (20MB replay) needs a typed view over that blob. Decision: the seed lives in `pi-render` as `RenderMessage`, parsed from the opaque `Value`, NOT in `pi-session` (which stays format-pure) and NOT as a new `pi-messages` crate (Phase 3 scope, explicitly deferred). Rationale: ADR 0026 puts the message-to-cell projection in `pi-render`; the message shape it projects from is part of that projection. Phase 3's `pi-messages` crate replaces the `Value`-parse with a typed projection under the passing test — a refactor, not a rewrite. `pi-replay` (depends on both `pi-session` and `pi-render` per ADR 0026) does the parse.
+
+Minimal shape (verified against [`packages/ai/src/types.ts`](https://github.com/earendil-works/pi/blob/v0.82.0/packages/ai/src/types.ts) at v0.82.0): role (user/assistant/toolResult) + `TextContent` + `ThinkingContent` + `ToolCall` + `ToolResult`. `ImageContent` deferred to a placeholder (Phase 2 replays text sessions; terminal image rendering — sixel/kitty graphics — is its own problem, additive later). Each field cited to the Oracle with a permalink per §9.5.
+
+### D-F: theme loading — typed `Theme` struct + `match` capture mapping
+
+Pi's theme schema verified against the pinned Oracle ([`theme-schema.json`](https://github.com/earendil-works/pi/blob/v0.82.0/packages/coding-agent/src/modes/interactive/theme/theme-schema.json) at v0.82.0) and confirmed live locally (`~/.pi/agent/themes/` holds 9 theme JSON files: catppuccin-mocha, dracula, gruvbox, nord, etc.; catppuccin-mocha sample confirms `vars` + `colors` referencing vars by name). The schema has a 9-key `syntax*` palette (`syntaxComment`, `syntaxKeyword`, `syntaxFunction`, `syntaxVariable`, `syntaxString`, `syntaxNumber`, `syntaxType`, `syntaxOperator`, `syntaxPunctuation`). Color values are four-variant: hex (`#RRGGBB`), var reference (from `vars`), empty string (terminal default), 256-color index (0–255).
+
+Decision: load each theme into a typed `Theme` struct in `pi-render` (parse-don't-validate, PHILOSOPHY §4), tolerant of unknown keys for forward-compat (ADR 0020: "pi-rs must tolerate unknown keys and never rewrite the file destructively"). Themes are read-only in pi-rs (pi-rs reads `~/.pi/agent/themes/*.json`, never writes them). Var references preserved unresolved in the struct, resolved at render time. The capture→palette mapping is a `match` expression in one module (ADR 0012's "single place to tune"): tree-sitter's ~27 standard captures ([tree-sitter highlighting docs](https://tree-sitter.github.io/tree-sitter/3-syntax-highlighting.html)) → pi's 9 `syntax*` keys, plain-text fallback for unmapped captures. A data file was rejected (adds a load step and parity surface for a small stable table). Live theme switch is a `RenderEvent::ThemeChanged` that flushes the block cache (ADR 0010) and re-projects.
+
+Parity details the loader must replicate: `name` must not contain `/` (reserved for light/dark); `thinkingMax` optional, falls back to `thinkingXhigh`; `export` section (HTML) tolerated but not a Phase 2 concern.
+
+### D-G: exit-gate measurement — real tmux + regression suite + human sign-off
+
+The Phase 2 exit gate ("20MB-class session replays at full speed inside tmux, zero visual artifacts" + "benchmarks green") is NOT fully automatable. Decision: the automatable regressions run in CI on the ubuntu-latest lane (tmux is pre-installed on GH Actions Linux runners); the transient visual quality is human-signed via a recorded replay (asciinema/ttyrec) on the gate PR, like Phase 3's dogfood evidence.
+
+CI regression suite (the automatable "zero artifacts"): (a) P13 width corpus snapshot (cell-diff corruption from width drift); (b) balanced BSU/ESU pairs (every flush wrapped in synchronized output, no torn frames); (c) terminal-restore probe after exit (P15: alt screen left, raw mode off, kitty flags popped); (d) frame-time benchmark under budget; (e) no-panic soak on the 20MB replay; (f) final-frame insta snapshots of representative replay states.
+
+Session source: synthetic 20MB generator in `pi-replay` (real `pi-session` entry types, realistic content: large bash outputs, file reads) for CI — reproducible, size-controllable; plus any real Corpus session from `~/.pi/agent/sessions` for the human sign-off if available.
+
+Benchmark budgets: frame-time p99 < 16ms per coalesced frame (the 60fps budget from ADR 0013's ≥16ms coalescing; dropped frames are the failure). Input-latency p99 < 16ms (keystroke-to-frame; input read on the render thread per ADR 0013, so near-zero minus the frame budget). Baselines committed; criterion regression detection for drift. "Full speed" replay = render every coalesced frame without artificial throttle. The 16ms number is tunable, not ADR-worthy.
