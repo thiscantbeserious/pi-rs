@@ -28,15 +28,15 @@ pub struct TerminalGuard {
 }
 
 impl Session {
-    /// Enter the terminal session: alt screen, raw mode, mouse capture, kitty
-    /// keyboard flags. Returns a guard that restores on drop. Writes to real
-    /// stdout and enables raw mode on the real fd.
+    /// Enter the terminal session: alt screen, raw mode, mouse capture,
+    /// kitty keyboard flags (if `push_kitty`). Returns a guard that restores
+    /// on drop. Writes to real stdout and enables raw mode on the real fd.
     ///
     /// Requires a real tty; cannot be tested in CI without a pty harness.
-    /// The testable seams are `enter_to` / `restore_to` (ANSI sequences to a
-    /// buffer) and the broad behavior tests.
-    pub fn enter() -> io::Result<TerminalGuard> {
-        let mut guard = Self::enter_to(&mut io::stdout(), false)?;
+    /// The testable seams are `enter_to` / `restore_to` (ANSI sequences to
+    /// a buffer) and the broad behavior tests.
+    pub fn enter(push_kitty: bool) -> io::Result<TerminalGuard> {
+        let mut guard = Self::enter_to(&mut io::stdout(), push_kitty)?;
         crossterm::terminal::enable_raw_mode()?;
         guard.raw_mode_enabled = true;
         Ok(guard)

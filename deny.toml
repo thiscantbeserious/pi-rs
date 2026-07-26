@@ -21,10 +21,9 @@
 # P16: deny duplicate versions in the dependency tree. A crossterm or
 # ratatui duplicate here is the P16 failure mode and fails the build.
 multiple-versions = "deny"
-# Workspace deps (`pi-protocol.workspace = true`) inherit versions and look
-# like wildcards to cargo-deny; allow them (the project unifies via the
-# workspace table, P16 discipline).
-wildcards = "allow"
+# Deny wildcard versions for external crates, but allow them for
+# workspace path dependencies (pi-protocol.workspace = true etc.).
+allow-wildcard-paths = true
 
 # Known transitive duplicates unrelated to the terminal-backend P16 guard.
 [[bans.skip]]
