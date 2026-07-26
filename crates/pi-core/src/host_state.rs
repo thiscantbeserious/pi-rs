@@ -473,8 +473,10 @@ mod tests {
             upstream_tx,
             downstream_rx,
         ));
-        // Leak the dir so the socket file survives; cleaned up on test exit.
-        std::mem::forget(dir);
+        // The temp dir (and its socket file) drops here. The established
+        // UnixStream pair survives: on Unix, deleting the socket file after
+        // connect+accept does not affect the live connection.
+        drop(dir);
         ConnTriple {
             upstream: upstream_rx,
             downstream: downstream_tx,
