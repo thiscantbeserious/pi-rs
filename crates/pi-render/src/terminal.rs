@@ -24,37 +24,21 @@ pub struct Session;
 pub struct TerminalGuard {
     restored: bool,
     kitty_pushed: bool,
-    /// Called on restore to disable raw mode. `None` if raw mode wasn't
-    /// enabled (so restore skips it). Stored as a `fn` pointer so the guard
-    /// stays `Send` and needs no heap allocation.
-    disable_raw: Option<fn() -> io::Result<()>>,
+    raw_mode_enabled: bool,
 }
 
 impl Session {
     /// Enter the terminal session: alt screen, raw mode, mouse capture, kitty
     /// keyboard flags. Returns a guard that restores on drop. Writes to real
     /// stdout and enables raw mode on the real fd.
+    ///
+    /// Requires a real tty; cannot be tested in CI without a pty harness.
+    /// The testable seams are `enter_to` / `restore_to` (ANSI sequences to a
+    /// buffer) and the broad behavior tests.
     pub fn enter() -> io::Result<TerminalGuard> {
-        Self::enter_with_raw(
-            &mut io::stdout(),
-            false,
-            crossterm::terminal::enable_raw_mode,
-            crossterm::terminal::disable_raw_mode,
-        )
-    }
-
-    /// Enter with injectable raw-mode functions. `enter()` delegates here with
-    /// the real crossterm functions; tests inject no-ops to cover the full
-    /// lifecycle without a real tty.
-    pub fn enter_with_raw<W: Write>(
-        w: &mut W,
-        push_kitty: bool,
-        enable_raw: impl FnOnce() -> io::Result<()>,
-        disable_raw: fn() -> io::Result<()>,
-    ) -> io::Result<TerminalGuard> {
-        let mut guard = Self::enter_to(w, push_kitty)?;
-        enable_raw()?;
-        guard.disable_raw = Some(disable_raw);
+        let mut guard = Self::enter_to(&mut io::stdout(), false)?;
+        crossterm::terminal::enable_raw_mode()?;
+        guard.raw_mode_enabled = true;
         Ok(guard)
     }
 
@@ -78,7 +62,7 @@ impl Session {
         Ok(TerminalGuard {
             restored: false,
             kitty_pushed: push_kitty,
-            disable_raw: None,
+            raw_mode_enabled: false,
         })
     }
 }
@@ -95,8 +79,8 @@ impl TerminalGuard {
         if self.kitty_pushed {
             crossterm::queue!(w, PopKeyboardEnhancementFlags)?;
         }
-        if let Some(disable) = self.disable_raw.take() {
-            disable()?;
+        if self.raw_mode_enabled {
+            crossterm::terminal::disable_raw_mode()?;
         }
         self.restored = true;
         Ok(())
@@ -160,8 +144,7 @@ mod tests {
     #[test]
     fn session_lifecycle_leaves_terminal_clean() {
         let mut enter_buf = Vec::new();
-        let mut guard =
-            Session::enter_with_raw(&mut enter_buf, true, || Ok(()), noop_disable_raw).unwrap();
+        let mut guard = Session::enter_to(&mut enter_buf, true).unwrap();
 
         // Enter must set up: alt screen, mouse capture, kitty push.
         assert!(
@@ -211,8 +194,7 @@ mod tests {
     #[test]
     fn session_without_kitty_does_not_pop_on_restore() {
         let mut enter_buf = Vec::new();
-        let mut guard =
-            Session::enter_with_raw(&mut enter_buf, false, || Ok(()), noop_disable_raw).unwrap();
+        let mut guard = Session::enter_to(&mut enter_buf, false).unwrap();
         assert!(
             !enter_buf.windows(b"\x1b[>".len()).any(|w| w == b"\x1b[>"),
             "enter must not push kitty when not requested"
@@ -232,8 +214,7 @@ mod tests {
     /// corrupt terminal state.
     #[test]
     fn double_restore_is_safe() {
-        let mut guard =
-            Session::enter_with_raw(&mut Vec::new(), false, || Ok(()), noop_disable_raw).unwrap();
+        let mut guard = Session::enter_to(&mut Vec::new(), false).unwrap();
         let mut first = Vec::new();
         guard.restore_to(&mut first).unwrap();
         let mut second = Vec::new();
@@ -296,25 +277,5 @@ mod tests {
             std::io::ErrorKind::Unsupported,
             "error must be Unsupported"
         );
-    }
-
-    /// P15: enter() delegates to enter_with_raw with the real crossterm
-    /// functions. Without a tty (CI), enable_raw_mode fails and enter must
-    /// propagate the error (fail closed). With a tty, the guard is created
-    /// and must be restorable. Either way, no panic.
-    #[test]
-    fn enter_fails_closed_without_tty() {
-        let result = Session::enter();
-        if let Ok(mut guard) = result {
-            // We have a tty; the guard must restore cleanly.
-            let mut buf = Vec::new();
-            guard.restore_to(&mut buf).unwrap();
-        }
-        // Without a tty, result is Err. That's correct fail-closed behavior.
-    }
-
-    /// No-op raw-mode disable function for tests.
-    fn noop_disable_raw() -> io::Result<()> {
-        Ok(())
     }
 }

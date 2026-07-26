@@ -11,7 +11,7 @@ name = "pi_render"
 path = "src/lib.rs"
 
 [dependencies]
-ratatui.workspace = true
+ratatui = { workspace = true, default-features = false, features = ["crossterm"] }
 crossterm.workspace = true
 
 [dev-dependencies]

@@ -3,27 +3,37 @@
 # The P16 failure mode: duplicate crossterm/terminal-backend versions in one
 # binary cause event-queue mismatches and state-restore races. pi-render is
 # the sole crate that depends on ratatui/crossterm (ADR 0026); this config
-# reports any duplicate in CI so a crossterm/ratatui split is caught.
+# denies any duplicate version in CI so a crossterm/ratatui split is caught.
 #
-# `multiple-versions = "warn"` (advisory, not blocking): the Rust ecosystem
-# has near-universal transitive splits (syn 1.x from tokio-macros vs 2.x from
-# thiserror-impl; hashbrown 0.16/0.17 from ratatui vs ts-rs) that make
-# `= "deny"` impractical without extensive skips. A crossterm/ratatui
-# duplicate — the actual P16 concern — would appear in this output and fail
-# review. Tighten to `= "deny"` with skips once the tree stabilizes.
+# Known transitive duplicates unrelated to the terminal-backend P16 guard:
+# - syn 2.x (thiserror-impl) vs 3.x (serde_derive): near-universal Rust
+#   ecosystem split, no safe resolution.
+# - hashbrown 0.16/0.17: ratatui vs ts-rs tree split.
+# The newer duplicate version is skipped (cargo-deny skips the "extra"
+# version, keeping the older one). Remove the skips when the upstream trees
+# unify.
 
 [advisories]
 # RUSTSEC advisories: warn (advisory until explicitly opted into blocking,
 # matching the project gate discipline: AGENTS.md gates are never lowered).
 
 [bans]
-# P16: report duplicate versions in the dependency tree. A crossterm or
-# ratatui duplicate here is the P16 failure mode and fails review.
-multiple-versions = "warn"
+# P16: deny duplicate versions in the dependency tree. A crossterm or
+# ratatui duplicate here is the P16 failure mode and fails the build.
+multiple-versions = "deny"
 # Workspace deps (`pi-protocol.workspace = true`) inherit versions and look
 # like wildcards to cargo-deny; allow them (the project unifies via the
 # workspace table, P16 discipline).
 wildcards = "allow"
+
+# Known transitive duplicates unrelated to the terminal-backend P16 guard.
+[[bans.skip]]
+name = "syn"
+version = "2.0.119"
+
+[[bans.skip]]
+name = "hashbrown"
+version = "0.17.1"
 
 [licenses]
 # pi-rs is MIT; dependencies must be compatible.
