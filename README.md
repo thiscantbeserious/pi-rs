@@ -122,6 +122,7 @@ flowchart TB
 - [ADR 0025](./docs/adr/0025-projection-layer-grapheme-cluster-width.md): Projection-layer grapheme-cluster width (width not delegated to ratatui)
 - [ADR 0026](./docs/adr/0026-phase-2-render-subsystem-pi-render-crate.md): Phase 2 render subsystem: a dedicated pi-render crate (amends ADR 0011)
 - [ADR 0027](./docs/adr/0027-render-path-is-a-terminal-sandbox.md): 📝 PROPOSED — Terminal security: ANSI injection, trust boundaries, tool-call sandboxing (P20, needs research)
+- [ADR 0028](./docs/adr/0028-central-trust-layer-transparent-sandboxing.md): 📝 PROPOSED — Central trust layer: transparent sandboxing for all untrusted content and execution (foundational, subsumes ADR 0027, needs research)
 
 ## Platform support (v1)
 
