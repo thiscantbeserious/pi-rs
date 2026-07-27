@@ -1,0 +1,22 @@
+# The render path is a terminal sandbox: no raw stdout, cell content is data
+
+Untrusted content (tool results, extension frame buffers, provider streaming output, markdown) can carry raw ANSI escape sequences that, if written to stdout directly, hijack the terminal: enter alt screen, enable mouse capture, wipe scrollback, execute arbitrary terminal commands. This is both a correctness bug (P20: a pi-render test emitting `\x1b[?1049h` in tool output trapped the user in alt-screen mode across `/resume`) and a security vulnerability (ANSI injection: an attacker who controls tool output can hijack the terminal).
+
+The guard is structural, not a sanitization filter at every trust boundary. The render path is a **sandbox**: untrusted content enters cells as **data**, and the only bytes that reach stdout are the renderer's own controlled diff output (cursor moves, cell writes via `Buffer::diff`). No cell content is ever passed through to stdout as a raw terminal command. This is one invariant — "stdout is only ever written via the renderer's controlled diff, never raw content" — that covers every trust boundary, rather than N sanitization points where one miss is a vulnerability.
+
+The session file is a separate concern. Tool results stored in the session JSONL must be sanitized on write (ADR 0016: the Core is the sole session writer) so the file is always safe for both pi-rs and pi (ADR 0008 interop: pi's inline renderer is NOT sandboxed, so raw ANSI in a session file that pi reads will hijack the terminal on `/resume`). Sanitization on write, not on read: the stored format is always safe.
+
+## Considered Options
+
+- **Sanitize at every trust boundary** — rejected: N sanitization points (tool results, extension frame buffers, provider output, markdown input), each a potential miss. One forgotten boundary is a vulnerability. The sandbox invariant is one rule that covers all of them.
+- **Sanitize on read (before rendering)** — rejected: the session file would still contain raw ANSI, and pi (which reads the same files, ADR 0008) does not sanitize. The stored format must be safe, not just the rendered output.
+- **Raw stdout renderer with escaping** — rejected: this is pi's model (inline differential rendering writes content to stdout), and it is the failure mode P20 documents. pi-rs's cell-diff renderer (ADR 0004) makes the sandbox possible by construction.
+
+## Consequences
+
+- **The render thread writes to stdout only via the renderer's controlled diff** (cursor positioning + cell content writes from `Buffer::diff`). No code path in the render thread writes raw content to stdout. This is the sandbox boundary, enforced by code review and the single owned write path (ADR 0013: the render thread owns the terminal).
+- **Cell content is always data, never commands.** An `\x1b[?1049h` byte sequence stored in a cell is text that occupies cells; the terminal never interprets it because it arrives as cell-write data inside a synchronized-output frame, not as a raw escape sequence on stdout. The terminal only sees the renderer's cursor-move and cell-write commands.
+- **Session-file sanitization on write (ADR 0016).** When the Core writes a tool result to the session JSONL, it strips or escapes raw ANSI control sequences from the content before serialization. This makes the stored format safe for both pi-rs (sandboxed render) and pi (unsandboxed inline render). The sanitizer is a single function in the session-writer path, not scattered across render paths.
+- **Extension frame buffers (ADR 0003) are also sandboxed.** Extension UI arrives as pre-rendered retained buffers (lines of text). These lines are composited into the cell grid as data; they never reach stdout directly. An extension that emits raw ANSI in its `render(width)` output produces cells with that text, not terminal commands.
+- **This is a security boundary, not just a correctness guard.** A malicious tool result, a compromised extension, or a hostile provider response cannot hijack the terminal because none of them can write to stdout — they can only write to cells, and cells are data. The attack surface is the renderer's diff output, which is fully controlled by pi-rs.
+- **The sandbox does not protect against content that is visually misleading** (e.g., a tool result that looks like a system prompt). It protects against terminal-level hijacking (alt screen, mouse capture, scrollback wipe, arbitrary escape sequences). Social-engineering protection is a separate concern.

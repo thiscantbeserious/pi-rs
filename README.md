@@ -121,6 +121,7 @@ flowchart TB
 - [ADR 0024](./docs/adr/0024-terminal-backend-ratatui-on-crossterm.md): Terminal backend: ratatui on crossterm, mode 2026 wrapped by us, kitty keyboard via crossterm
 - [ADR 0025](./docs/adr/0025-projection-layer-grapheme-cluster-width.md): Projection-layer grapheme-cluster width (width not delegated to ratatui)
 - [ADR 0026](./docs/adr/0026-phase-2-render-subsystem-pi-render-crate.md): Phase 2 render subsystem: a dedicated pi-render crate (amends ADR 0011)
+- [ADR 0027](./docs/adr/0027-render-path-is-a-terminal-sandbox.md): The render path is a terminal sandbox: no raw stdout, cell content is data (P20 ANSI injection security guard)
 
 ## Platform support (v1)
 
