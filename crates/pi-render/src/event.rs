@@ -196,7 +196,7 @@ mod tests {
 
     /// MessageUpdate nests AssistantMessageEvent, mirroring pi's
     /// message_update.assistantMessageEvent (L432). The message field is the
-    /// mid-stream metadata channel (kept, not dropped — see ADR 0029).
+    /// mid-stream metadata channel (kept, not dropped. See ADR 0029).
     #[test]
     fn message_update_nests_streaming_event() {
         let ev = RenderEvent::MessageUpdate {

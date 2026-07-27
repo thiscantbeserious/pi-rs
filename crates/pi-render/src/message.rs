@@ -10,7 +10,7 @@
 //!
 //! **Render projection, not a full mirror:** [`MessageRef`] carries only
 //! render-relevant fields. The agent loop (Phase 3) keeps the full
-//! `AssistantMessage` (usage, diagnostics, provider, model — provider
+//! `AssistantMessage` (usage, diagnostics, provider, model. Provider
 //! concerns, not render state); `MessageRef` is what crosses into the render
 //! thread. Documented divergence per §9.5.
 
@@ -64,7 +64,7 @@ pub enum MessageRef {
     /// `AssistantMessage` (pi L390-L403). `stop_reason` is `Option` (unset
     /// during streaming, `Some` on finalize). Provider fields (api, provider,
     /// model, responseModel, responseId, diagnostics, usage, errorMessage)
-    /// omitted — render projection, not a full mirror (§9.5).
+    /// omitted. Render projection, not a full mirror (§9.5).
     Assistant {
         content: Vec<ContentBlock>,
         stop_reason: Option<crate::stream::StopReason>,

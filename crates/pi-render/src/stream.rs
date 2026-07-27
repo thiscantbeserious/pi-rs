@@ -26,15 +26,15 @@ use crate::message::MessageRef;
 /// `"stop" | "length" | "toolUse" | "error" | "aborted"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
-    /// `"stop"` — the model stopped naturally.
+    /// `"stop"`. The model stopped naturally.
     Stop,
-    /// `"length"` — hit the max-output token limit.
+    /// `"length"`. Hit the max-output token limit.
     Length,
-    /// `"toolUse"` — the model emitted a tool call.
+    /// `"toolUse"`. The model emitted a tool call.
     ToolUse,
-    /// `"error"` — the stream errored.
+    /// `"error"`. The stream errored.
     Error,
-    /// `"aborted"` — the stream was cancelled.
+    /// `"aborted"`. The stream was cancelled.
     Aborted,
 }
 

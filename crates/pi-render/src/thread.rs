@@ -91,18 +91,19 @@ fn run_loop<I: InputSource, D: FrameSink>(
     mut input: I,
     mut sink: D,
     mut rx: Receiver<RenderEvent>,
+    quit_flag: Arc<AtomicBool>,
 ) {
     let mut state = RenderState::default();
     while !state.quit {
-        // 1. Poll input (≤16ms cadence, ADR 0013). A flaky input read must not
-        //    kill the render thread: treat errors as no input.
+        // 1. Poll input (≤16ms cadence, ADR 0013). A flaky input read must
+        //    not kill the render thread: treat errors as no input.
         let input_quit = matches!(input.poll(FRAME_POLL), Ok(Some(InputEvent::Quit)));
         // 2. Drain events non-blocking (ADR 0013).
         let events = drain_events(&mut rx);
         // 3. Apply single-threaded (ADR 0013). Step 3 projects the RMM to
         //    cells here.
         let dirty = state.apply(&events);
-        if input_quit {
+        if input_quit || quit_flag.load(Ordering::Acquire) {
             state.quit = true;
         }
         // 4. Draw if dirty (ADR 0010 coalescing). Step 3 wraps flush in mode
@@ -118,32 +119,42 @@ fn run_loop<I: InputSource, D: FrameSink>(
 /// agent loop, the Host Protocol) can send. [`RenderHandle::send`] is async
 /// (the sender lives on the tokio runtime, ADR 0013); [`RenderHandle::quit`]
 /// is sync (control path).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RenderHandle {
     tx: Sender<RenderEvent>,
+    /// Shared quit flag. Set by `quit()` and `Drop`; checked by `run_loop`
+    /// every frame. Guarantees shutdown even when the channel is full and
+    /// `try_send(Quit)` fails (GOALS goal 2: no orphaned threads).
+    quit_flag: Arc<AtomicBool>,
 }
 
 impl RenderHandle {
-    /// Send an event from the tokio side. Async because the sender lives on the
-    /// tokio runtime (ADR 0013). Bounded: backpressure policy is the agent
-    /// loop's concern (Phase 3).
+    /// Send an event from the tokio side. Async because the sender lives on
+    /// the tokio runtime (ADR 0013). Bounded: backpressure policy is the
+    /// agent loop's concern (Phase 3).
     pub async fn send(&self, ev: RenderEvent) -> Result<(), mpsc::error::SendError<RenderEvent>> {
         self.tx.send(ev).await.map(drop)
     }
 
     /// Signal the render thread to stop. Sync (control path, not the frame
-    /// path); best-effort.
+    /// path). Sets the shared quit flag so `run_loop` exits within one frame
+    /// (≤16ms) even if the `try_send` fails on a full channel.
     pub fn quit(&self) {
+        self.quit_flag.store(true, Ordering::Release);
         let _ = self.tx.try_send(RenderEvent::Quit);
     }
 }
 
 /// The dedicated render OS thread (ADR 0013). [`RenderThread::join`] to ensure
 /// a clean exit; dropping it signals [`RenderEvent::Quit`] and joins.
+#[derive(Debug)]
 pub struct RenderThread {
     join: Option<JoinHandle<()>>,
     /// Clone of the inbox sender so `Drop` can signal Quit before joining.
     tx: Sender<RenderEvent>,
+    /// Shared quit flag. `Drop` sets it so `run_loop` exits within one frame
+    /// even if `try_send(Quit)` fails on a full channel.
+    quit_flag: Arc<AtomicBool>,
 }
 
 impl RenderThread {
@@ -151,6 +162,9 @@ impl RenderThread {
     /// channel capacity. The thread owns the terminal and the state; it never
     /// awaits (ADR 0013). Returns a handle to send events and the thread to
     /// join.
+    ///
+    /// `channel_cap` must be positive. Zero panics in tokio's `mpsc::channel`;
+    /// we reject it with `InvalidInput` instead (fail closed, not panic).
     pub fn spawn<I, D>(
         input: I,
         sink: D,
@@ -160,15 +174,27 @@ impl RenderThread {
         I: InputSource + 'static,
         D: FrameSink + 'static,
     {
+        if channel_cap == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "channel_cap must be positive",
+            ));
+        }
         let (tx, rx) = mpsc::channel(channel_cap);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let loop_quit = quit_flag.clone();
         let join = thread::Builder::new()
             .name("pi-render".into())
-            .spawn(move || run_loop(input, sink, rx))?;
+            .spawn(move || run_loop(input, sink, rx, loop_quit))?;
         Ok((
-            RenderHandle { tx: tx.clone() },
+            RenderHandle {
+                tx: tx.clone(),
+                quit_flag: quit_flag.clone(),
+            },
             RenderThread {
                 join: Some(join),
                 tx,
+                quit_flag,
             },
         ))
     }
@@ -184,8 +210,10 @@ impl RenderThread {
 
 impl Drop for RenderThread {
     fn drop(&mut self) {
-        // Fail closed: signal Quit, then join so the thread never leaks
-        // (GOALS goal 2: no orphaned threads).
+        // Fail closed: set the quit flag (guarantees `run_loop` exits within
+        // one frame even if the channel is full), then join so the thread
+        // never leaks (GOALS goal 2: no orphaned threads).
+        self.quit_flag.store(true, Ordering::Release);
         let _ = self.tx.try_send(RenderEvent::Quit);
         if let Some(j) = self.join.take() {
             let _ = j.join();
@@ -330,6 +358,20 @@ mod tests {
         let res = input.poll(Duration::from_millis(10)).unwrap();
         assert!(start.elapsed() >= Duration::from_millis(8));
         assert_eq!(res, None);
+    }
+
+    /// `channel_cap` of zero is rejected with `InvalidInput`, not a panic.
+    /// tokio's `mpsc::channel` panics on zero capacity; we fail closed.
+    #[test]
+    fn zero_channel_cap_is_rejected() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let result = RenderThread::spawn(NullInput, CountingSink::new(observed), 0);
+        assert!(result.is_err(), "zero channel_cap must error");
+        assert_eq!(
+            result.unwrap_err().kind(),
+            io::ErrorKind::InvalidInput,
+            "error must be InvalidInput"
+        );
     }
 
     /// Build a MessageUpdate carrying a TextDelta (the streaming token event).
