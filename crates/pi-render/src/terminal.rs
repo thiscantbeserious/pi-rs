@@ -74,6 +74,11 @@ impl TerminalGuard {
     /// If raw mode was enabled, disables it (on the real fd, not `w`).
     /// Flushes `w` after queuing so the terminal receives the restore
     /// immediately (P15: terminal must be clean before backtrace prints).
+    ///
+    /// `restored` is set before `disable_raw_mode`: if raw-mode disable
+    /// fails, the ANSI teardown (alt screen, mouse, kitty) is already
+    /// flushed and must not be re-emitted on Drop. Raw mode being stuck is
+    /// a lesser failure than replaying teardown sequences.
     pub fn restore_to<W: Write>(&mut self, w: &mut W) -> io::Result<()> {
         if self.restored {
             return Ok(());
@@ -83,10 +88,12 @@ impl TerminalGuard {
             crossterm::queue!(w, PopKeyboardEnhancementFlags)?;
         }
         w.flush()?;
-        if self.raw_mode_enabled {
-            crossterm::terminal::disable_raw_mode()?;
-        }
         self.restored = true;
+        if self.raw_mode_enabled {
+            // Best-effort: if this fails, the ANSI teardown is already
+            // flushed. Don't re-emit it on Drop.
+            let _ = crossterm::terminal::disable_raw_mode();
+        }
         Ok(())
     }
 }
