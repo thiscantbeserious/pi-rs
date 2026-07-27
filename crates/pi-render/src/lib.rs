@@ -7,7 +7,9 @@
 //! other threads and communicates via channels.
 
 pub mod event;
+pub mod input;
 pub mod message;
+pub mod render;
 pub mod state;
 pub mod stream;
 pub mod suspend;

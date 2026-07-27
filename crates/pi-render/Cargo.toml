@@ -15,14 +15,9 @@ ratatui = { workspace = true, default-features = false, features = [
   "crossterm",
 ] }
 crossterm.workspace = true
-# Render-thread ↔ tokio channel (ADR 0013). The render thread is a plain
-# std::thread that drains via try_recv (non-blocking, no runtime needed);
-# only the Sender side is awaited on the tokio runtime in pi-core.
-tokio = { version = "1", features = ["sync"] }
 # Opaque payloads for RenderEvent/AssistantMessageEvent until Step 7 (D-E)
 # defines the typed RenderMessage. §9.2 assumption.
 serde_json = "1"
 
 [dev-dependencies]
 insta.workspace = true
-tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
