@@ -1,10 +1,14 @@
 # Provider trait with host-proxy bootstrap, Rust-native majors as destination
 
+**⚠ PARTIALLY SUPERSEDED BY [ADR 0019](./0019-providers-rust-native-day-one.md):** the host-proxy bootstrap phase is dropped. The Provider trait and per-API-type implementation order stand; the host-provider slot remains for extension-registered custom providers only.
+
+---
+
 ## Status
 
 partially superseded by ADR 0019: the Provider trait and the per-API-type implementation order stand, the host-proxy bootstrap phase is dropped. The host-provider slot remains for extension-registered custom providers only
 
-The Core defines a Provider trait from day one. Its first implementation is a host-proxy that streams through pi-ai in the Extension Host (fastest path to a working end-to-end system, 100% provider and auth compat). Native Rust implementations then land one at a time - implemented per API type, not per brand, mirroring pi's own model (`api: "openai-completions"` etc. with baseUrl + compat flags) [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md). The Oracle defines ten `KnownApi` values (see [ADR 0019](./0019-providers-rust-native-day-one.md) for the full list and `docs/oracle-drift-audit.md` finding D2); the four daily drivers land first in priority order: `openai-completions` (broadest coverage - Ollama, vLLM, OpenRouter, proxies, local servers), `anthropic-messages` (daily driver, OAuth), then `openai-responses` and `google-generative-ai`. The proxy path remains permanently as the compatibility slot for custom/exotic TS providers.
+The Core defines a Provider trait from day one. ~~Its first implementation is a host-proxy that streams through pi-ai in the Extension Host (fastest path to a working end-to-end system, 100% provider and auth compat).~~ **SUPERSEDED by ADR 0019:** providers are Rust-native from day one; the host-proxy bootstrap phase is dropped. The Provider trait and per-API-type implementation order are authoritative. Native Rust implementations are built per API type, not per brand, mirroring pi's own model (`api: "openai-completions"` etc. with baseUrl + compat flags) [[1]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md). The Oracle defines ten `KnownApi` values (see [ADR 0019](./0019-providers-rust-native-day-one.md) for the full list and `docs/oracle-drift-audit.md` finding D2); the four daily drivers land first in priority order: `openai-completions` (broadest coverage - Ollama, vLLM, OpenRouter, proxies, local servers), `anthropic-messages` (daily driver, OAuth), then `openai-responses` and `google-generative-ai`. The host-provider slot remains permanently as the compatibility slot for extension-registered custom providers only.
 
 ## Considered Options
 
@@ -13,10 +17,10 @@ The Core defines a Provider trait from day one. Its first implementation is a ho
 
 ## Consequences
 
-- Credentials migrate out of the Extension Host as each native provider lands. The endgame is credential isolation extensions cannot read
+- ~~Credentials migrate out of the Extension Host as each native provider lands.~~ **SUPERSEDED by ADR 0019:** credentials are in the Core from day one (Rust-native providers). The endgame is credential isolation extensions cannot read
 - The Core owns the wire-format maintenance treadmill for native providers (streaming deltas, thinking blocks, cache headers, OAuth refresh)
-- Token streaming over the proxy crosses IPC. Acceptable because provider traffic is network-bound, but the Host Protocol must handle high-frequency small messages efficiently
-- Accepted bootstrap risk: while all providers are host-proxied, a dead host means no LLM and no hooks - the Core can only render and prompt for host restart (ADR 0009). Each native API type landing shrinks this window. Compat flags (supportsDeveloperRole, supportsReasoningEffort) must be honored for parity
+- ~~Token streaming over the proxy crosses IPC.~~ **SUPERSEDED by ADR 0019:** token streaming is native Rust, no IPC for provider traffic. The Host Protocol handles extension-registered custom providers only
+- ~~Accepted bootstrap risk: while all providers are host-proxied, a dead host means no LLM and no hooks~~ **SUPERSEDED by ADR 0019:** no bootstrap risk; providers are Rust-native from day one. Compat flags (supportsDeveloperRole, supportsReasoningEffort) must be honored for parity
 
 ## Sources
 

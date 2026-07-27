@@ -1,0 +1,63 @@
+# cargo-deny configuration (P16 guard, ADR 0024 "starts here").
+#
+# The P16 failure mode: duplicate crossterm/terminal-backend versions in one
+# binary cause event-queue mismatches and state-restore races. pi-render is
+# the sole crate that depends on ratatui/crossterm (ADR 0026); this config
+# denies any duplicate version in CI so a crossterm/ratatui split is caught.
+#
+# Known transitive duplicates unrelated to the terminal-backend P16 guard:
+# - syn 2.x (thiserror-impl) vs 3.x (serde_derive): near-universal Rust
+#   ecosystem split, no safe resolution.
+# - hashbrown 0.16/0.17: ratatui vs ts-rs tree split.
+# The newer duplicate version is skipped (cargo-deny skips the "extra"
+# version, keeping the older one). Remove the skips when the upstream trees
+# unify.
+
+[advisories]
+# RUSTSEC advisories are advisory-only (not blocking). cargo-deny's default
+# is to warn. To make them blocking, set: db-urls = ["https://github.com/rustsec/advisory-db"]
+# and vulnerability = "deny". Left advisory per AGENTS.md gate discipline
+# (gates are never lowered, and new gates are added deliberately).
+
+[bans]
+# P16: deny duplicate versions in the dependency tree. A crossterm or
+# ratatui duplicate here is the P16 failure mode and fails the build.
+multiple-versions = "deny"
+# Workspace deps (`pi-protocol.workspace = true`) inherit versions and look
+# like wildcards to cargo-deny; allow them (the project unifies via the
+# workspace table, P16 discipline). allow-wildcard-paths does not apply to
+# public crates (crates.io disallows path deps), so wildcards = "allow" is
+# needed for workspace inheritance.
+wildcards = "allow"
+
+# Known transitive duplicates unrelated to the terminal-backend P16 guard.
+[[bans.skip]]
+name = "syn"
+version = "2.0.119"
+
+[[bans.skip]]
+name = "hashbrown"
+version = "0.17.1"
+
+[licenses]
+# pi-rs is MIT; dependencies must be compatible.
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "Zlib",
+  "CC0-1.0",
+  "MPL-2.0",
+]
+
+[sources]
+# Only allow crates.io (no git deps, no private registries).
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

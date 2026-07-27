@@ -1,5 +1,9 @@
 # Dedicated synchronous render thread. Tokio for everything async
 
+**📝 REFINED BY [ADR 0024](./0024-terminal-backend-ratatui-on-crossterm.md):** the render thread drives the terminal through ratatui on crossterm, not by re-implementing the cell layer directly. Ownership of the terminal and the Retained Message Model is unchanged; it is exercised *through* ratatui/crossterm.
+
+---
+
 The render loop owns a dedicated OS thread running a tight synchronous loop (poll input ≤16ms → drain state changes → cell-diff → synchronized write) and never awaits. All async concerns - provider streams, Host Protocol traffic, heartbeats, tool subprocesses, timers - run on a tokio runtime on other threads. The sides communicate via channels feeding the retained model [[1]](https://tokio.rs/tokio/tutorial/channels). The render thread consumes state non-blocking (precedent: Bevy's pipelined rendering uses the same main/render thread split [[2]](https://github.com/bevyengine/bevy/blob/main/crates/bevy_render/src/pipelined_rendering.rs)). Frame timing is immune to executor scheduling by construction, and input reading stays on the render thread for minimum keystroke latency.
 
 ## Considered Options
@@ -15,5 +19,5 @@ The render loop owns a dedicated OS thread running a tight synchronous loop (pol
 
 ## Sources
 
-1. tokio channels for cross-thread messaging: https://tokio.rs/tokio/tutorial/channels
-2. Bevy pipelined rendering, main/render thread split precedent: https://github.com/bevyengine/bevy/blob/main/crates/bevy_render/src/pipelined_rendering.rs
+1. tokio channels for cross-thread messaging: <https://tokio.rs/tokio/tutorial/channels>
+2. Bevy pipelined rendering, main/render thread split precedent: <https://github.com/bevyengine/bevy/blob/main/crates/bevy_render/src/pipelined_rendering.rs>

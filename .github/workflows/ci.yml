@@ -310,6 +310,23 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+  # P16 guard (ADR 0024): duplicate-version check for crossterm/terminal-backend.
+  # Lands in Step 1 so Steps 1-7 run under the guard.
+  cargo-deny:
+    name: cargo-deny (P16)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
   # 6. Deno lane - codec tests, conformance tests, host type-check (ADR 0011)
   deno:
     name: Deno Tests & Type-Check

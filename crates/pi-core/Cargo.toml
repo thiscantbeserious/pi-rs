@@ -19,6 +19,7 @@ bench = false
 
 [dependencies]
 pi-protocol.workspace = true
+pi-render.workspace = true
 tokio = { version = "1", features = [
   "net",
   "io-util",
