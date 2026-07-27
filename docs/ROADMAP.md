@@ -68,16 +68,19 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 ## Phase 2 - Render core
 
-**Status:** ⏳ pending | **Milestone:** M2 Renderer proven
+**Status:** 🔨 active | **Milestone:** M2 Renderer proven
 
 **Objective:** retire the rendering-performance risk, the reason this project exists (GOALS.md goal 1), with measured evidence instead of belief.
 
 **Deliverables:**
 
-- [ ] Render thread + tokio split with render-thread-owned Retained Message Model (ADR 0013)
+- [x] Panic-safe terminal restore on every exit path (pitfall P15) — Step 1: `pi-render` crate skeleton, `Session::enter`/`restore_to`, panic hook, zero-size guard (ADR 0026)
+- [ ] Render thread + tokio split with render-thread-owned Retained Message Model (ADR 0013, ADR 0024)
 - [ ] Alt screen, cell diff, synchronized-output detection with graceful degradation (ADR 0004, pitfall P12)
-- [ ] Grapheme-width handling with emoji/ZWJ/CJK test corpus (pitfall P13)
-- [ ] Panic-safe terminal restore on every exit path (pitfall P15)
+- [ ] Grapheme-width handling with emoji/ZWJ/CJK test corpus (pitfall P13, ADR 0025)
+- [x] cargo-deny P16 guard in CI (ADR 0024)
+- [x] P19: terminal scrollback empty in pi's inline renderer — documented (pitfalls.md)
+- [x] P20: ANSI injection from tool output — documented (pitfalls.md, ADRs 0027/0028 proposed)
 - [ ] Streaming markdown pipeline: pulldown-cmark + tree-sitter with block caching (ADR 0010), incomplete-code highlight tests (pitfall P18)
 - [ ] Theme loading from the shared ~/.pi tree (ADRs 0012/0020)
 - [ ] Frame-time and input-latency benchmarks under synthetic streaming workloads, wired into CI
