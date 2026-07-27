@@ -59,6 +59,7 @@ impl Session {
                 )
             )?;
         }
+        w.flush()?;
         Ok(TerminalGuard {
             restored: false,
             kitty_pushed: push_kitty,
@@ -71,6 +72,8 @@ impl TerminalGuard {
     /// Write the restore sequence to `w`. Idempotent: a second call is a
     /// no-op. Safe to call from a panic hook (no allocation, no panics).
     /// If raw mode was enabled, disables it (on the real fd, not `w`).
+    /// Flushes `w` after queuing so the terminal receives the restore
+    /// immediately (P15: terminal must be clean before backtrace prints).
     pub fn restore_to<W: Write>(&mut self, w: &mut W) -> io::Result<()> {
         if self.restored {
             return Ok(());
@@ -79,6 +82,7 @@ impl TerminalGuard {
         if self.kitty_pushed {
             crossterm::queue!(w, PopKeyboardEnhancementFlags)?;
         }
+        w.flush()?;
         if self.raw_mode_enabled {
             crossterm::terminal::disable_raw_mode()?;
         }

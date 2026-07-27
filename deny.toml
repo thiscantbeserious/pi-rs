@@ -14,16 +14,21 @@
 # unify.
 
 [advisories]
-# RUSTSEC advisories: warn (advisory until explicitly opted into blocking,
-# matching the project gate discipline: AGENTS.md gates are never lowered).
+# RUSTSEC advisories are advisory-only (not blocking). cargo-deny's default
+# is to warn. To make them blocking, set: db-urls = ["https://github.com/rustsec/advisory-db"]
+# and vulnerability = "deny". Left advisory per AGENTS.md gate discipline
+# (gates are never lowered, and new gates are added deliberately).
 
 [bans]
 # P16: deny duplicate versions in the dependency tree. A crossterm or
 # ratatui duplicate here is the P16 failure mode and fails the build.
 multiple-versions = "deny"
-# Deny wildcard versions for external crates, but allow them for
-# workspace path dependencies (pi-protocol.workspace = true etc.).
-allow-wildcard-paths = true
+# Workspace deps (`pi-protocol.workspace = true`) inherit versions and look
+# like wildcards to cargo-deny; allow them (the project unifies via the
+# workspace table, P16 discipline). allow-wildcard-paths does not apply to
+# public crates (crates.io disallows path deps), so wildcards = "allow" is
+# needed for workspace inheritance.
+wildcards = "allow"
 
 # Known transitive duplicates unrelated to the terminal-backend P16 guard.
 [[bans.skip]]
