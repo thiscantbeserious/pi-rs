@@ -52,6 +52,11 @@ pub enum InputEvent {
 pub trait InputSource: Send {
     /// Block up to `timeout` for input. Returns `Ok(None)` on timeout, or an
     /// input event. Synchronous (ADR 0013: never awaits).
+    ///
+    /// Must return within `timeout`. A blocking impl starves the quit-flag
+    /// check in `run_loop` and can hang shutdown (the render thread checks
+    /// the quit flag after `poll` returns, so an over-blocking poll delays
+    /// shutdown until it returns).
     fn poll(&mut self, timeout: Duration) -> io::Result<Option<InputEvent>>;
 }
 
