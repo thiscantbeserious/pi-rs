@@ -1,5 +1,9 @@
 # Provider trait with host-proxy bootstrap, Rust-native majors as destination
 
+**⚠ PARTIALLY SUPERSEDED BY [ADR 0019](./0019-providers-rust-native-day-one.md):** the host-proxy bootstrap phase is dropped. The Provider trait and per-API-type implementation order stand; the host-provider slot remains for extension-registered custom providers only.
+
+---
+
 ## Status
 
 partially superseded by ADR 0019: the Provider trait and the per-API-type implementation order stand, the host-proxy bootstrap phase is dropped. The host-provider slot remains for extension-registered custom providers only

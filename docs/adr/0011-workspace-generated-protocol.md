@@ -1,5 +1,9 @@
 # Cargo workspace with a single-source-of-truth, codegen'd Host Protocol
 
+**📝 AMENDED BY [ADR 0026](./0026-phase-2-render-subsystem-pi-render-crate.md):** the renderer moved from `pi-core` to a new `pi-render` crate. `pi-core` becomes "agent loop, host supervision, session writing, the render-thread lifecycle owner." The pi-session amendment below also stands.
+
+---
+
 The repo is a Cargo workspace - pi-core (TUI, renderer, agent loop), pi-protocol (Host Protocol message types), pi-replay (session replay harness over the JSONL corpus, ADR 0007), pi-session (pi's on-disk session format: header, entry types, migrations, naming, context reconstruction, ADR 0008) - plus host/ containing the TypeScript Extension Host in the same repo. Protocol messages are defined once in Rust (pi-protocol) and TypeScript definitions are generated from them, so schema drift between Core and host is a build failure, not a runtime surprise.
 
 ## Amendment 2026-07-25: pi-session crate

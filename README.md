@@ -99,15 +99,15 @@ flowchart TB
 - [ADR 0002](./docs/adr/0002-host-protocol-deno-first.md): Runtime-agnostic Host Protocol, Deno host first, Node as fallback
 - [ADR 0003](./docs/adr/0003-retained-frame-buffers-for-extension-ui.md): Extension UI crosses the Host Protocol as retained frame buffers
 - [ADR 0004](./docs/adr/0004-alternate-screen-retained-message-model.md): Alternate screen with a retained message model
-- [ADR 0005](./docs/adr/0005-provider-trait-host-proxy-bootstrap.md): Provider trait with host-proxy bootstrap (bootstrap superseded by ADR 0019)
+- ~~[ADR 0005](./docs/adr/0005-provider-trait-host-proxy-bootstrap.md): Provider trait with host-proxy bootstrap~~ ⚠ Partially superseded by [ADR 0019](./docs/adr/0019-providers-rust-native-day-one.md) (bootstrap dropped; trait and per-API-type order stand)
 - [ADR 0006](./docs/adr/0006-host-protocol-msgpack-uds.md): Host Protocol: length-prefixed MessagePack over Unix domain sockets
 - [ADR 0007](./docs/adr/0007-oracle-guided-full-parity.md): V1 bar is full parity, oracle-guided and measured by session replay
 - [ADR 0008](./docs/adr/0008-native-pi-session-format.md): Sessions use pi's native format, bidirectionally
 - [ADR 0009](./docs/adr/0009-hook-heartbeat-fail-closed.md): Tool-call hooks: unbounded await, heartbeat liveness, fail-closed
 - [ADR 0010](./docs/adr/0010-streaming-markdown-pipeline.md): Streaming markdown pipeline: pulldown-cmark structure, tree-sitter highlighting
-- [ADR 0011](./docs/adr/0011-workspace-generated-protocol.md): Cargo workspace with a single-source-of-truth, codegen'd Host Protocol
+- [ADR 0011](./docs/adr/0011-workspace-generated-protocol.md): Cargo workspace with a single-source-of-truth, codegen'd Host Protocol 📝 Amended by [ADR 0026](./docs/adr/0026-phase-2-render-subsystem-pi-render-crate.md) (renderer moved to pi-render)
 - [ADR 0012](./docs/adr/0012-native-pi-themes-capture-mapping.md): Themes use pi's native JSON format with a tree-sitter capture mapping
-- [ADR 0013](./docs/adr/0013-render-thread-plus-tokio.md): Dedicated synchronous render thread. Tokio for everything async
+- [ADR 0013](./docs/adr/0013-render-thread-plus-tokio.md): Dedicated synchronous render thread. Tokio for everything async 📝 Refined by [ADR 0024](./docs/adr/0024-terminal-backend-ratatui-on-crossterm.md) (ratatui on crossterm)
 - [ADR 0014](./docs/adr/0014-platform-scope-wsl-yes-windows-later.md): V1 platforms: Linux, macOS, WSL. Native Windows post-parity
 - [ADR 0015](./docs/adr/0015-builtin-tools-rust-native.md): Built-in tools are Rust-native in the Core
 - [ADR 0016](./docs/adr/0016-core-sole-session-writer.md): The Core is the sole session writer
