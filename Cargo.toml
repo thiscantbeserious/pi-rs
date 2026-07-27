@@ -33,6 +33,10 @@ crossterm = "0.29"
 # versions stay unified across the workspace (pitfall P16 guard starts here).
 insta = "1"
 
+# Auto-installs git hooks (pre-push: fmt + clippy + test) on cargo test/build.
+# No manual setup script needed. Skip with git push --no-verify.
+cargo-husky = { version = "1", features = ["run-cargo-fmt", "run-cargo-clippy", "run-cargo-test", "prepush-hook"] }
+
 # Shared dev/profile settings. Release stays LTO + single codegen unit for the
 # shipped binary; crates inherit via `profile.release` at the workspace root.
 [profile.release]
