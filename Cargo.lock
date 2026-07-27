@@ -959,6 +959,7 @@ dependencies = [
  "crossterm",
  "insta",
  "ratatui",
+ "tokio",
 ]
 
 [[package]]

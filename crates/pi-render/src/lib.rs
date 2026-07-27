@@ -6,5 +6,8 @@
 //! and never awaits (ADR 0013); everything async runs on the tokio runtime on
 //! other threads and communicates via channels.
 
+pub mod event;
+pub mod state;
 pub mod suspend;
 pub mod terminal;
+pub mod thread;
