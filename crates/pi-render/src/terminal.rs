@@ -221,8 +221,8 @@ mod tests {
         guard.restore_to(&mut second).unwrap();
         assert!(
             second.is_empty(),
-            "second restore must emit nothing, got {:?}",
-            String::from_utf8_lossy(&second)
+            "second restore must emit nothing, got {} bytes",
+            second.len()
         );
     }
 
