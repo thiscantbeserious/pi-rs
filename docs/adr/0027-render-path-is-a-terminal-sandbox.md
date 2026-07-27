@@ -1,22 +1,44 @@
-# The render path is a terminal sandbox: no raw stdout, cell content is data
+# Status: PROPOSED — needs research. Terminal security: ANSI injection, trust boundaries, and tool-call sandboxing
 
-Untrusted content (tool results, extension frame buffers, provider streaming output, markdown) can carry raw ANSI escape sequences that, if written to stdout directly, hijack the terminal: enter alt screen, enable mouse capture, wipe scrollback, execute arbitrary terminal commands. This is both a correctness bug (P20: a pi-render test emitting `\x1b[?1049h` in tool output trapped the user in alt-screen mode across `/resume`) and a security vulnerability (ANSI injection: an attacker who controls tool output can hijack the terminal).
+**⚠ This ADR is open. It records the problem and the open questions, not a final decision. The render-path sandbox invariant is a candidate, not a settled design. Research and a grilling session are required before implementation.**
 
-The guard is structural, not a sanitization filter at every trust boundary. The render path is a **sandbox**: untrusted content enters cells as **data**, and the only bytes that reach stdout are the renderer's own controlled diff output (cursor moves, cell writes via `Buffer::diff`). No cell content is ever passed through to stdout as a raw terminal command. This is one invariant — "stdout is only ever written via the renderer's controlled diff, never raw content" — that covers every trust boundary, rather than N sanitization points where one miss is a vulnerability.
+P20 (observed in production) is an ANSI injection vulnerability: tool results containing raw escape sequences (`\x1b[?1049h`) are rendered to the terminal by pi's inline renderer, which interprets them as real terminal commands. This trapped the user in alt-screen mode (no scrollback) and persisted across `/resume` because the sequences were stored in the session JSONL. An attacker who controls tool output can hijack the terminal.
 
-The session file is a separate concern. Tool results stored in the session JSONL must be sanitized on write (ADR 0016: the Core is the sole session writer) so the file is always safe for both pi-rs and pi (ADR 0008 interop: pi's inline renderer is NOT sandboxed, so raw ANSI in a session file that pi reads will hijack the terminal on `/resume`). Sanitization on write, not on read: the stored format is always safe.
+This ADR attempts to scope the full security surface, not just the ANSI injection fix. The open questions span: where untrusted content enters the system, how each entry point is guarded, whether tool calls need OS-level sandboxing (not just terminal-output sandboxing), and how the session file stays safe for bidirectional pi interop (ADR 0008).
 
-## Considered Options
+## The trust boundaries (open: which need guards, and what kind)
 
-- **Sanitize at every trust boundary** — rejected: N sanitization points (tool results, extension frame buffers, provider output, markdown input), each a potential miss. One forgotten boundary is a vulnerability. The sandbox invariant is one rule that covers all of them.
-- **Sanitize on read (before rendering)** — rejected: the session file would still contain raw ANSI, and pi (which reads the same files, ADR 0008) does not sanitize. The stored format must be safe, not just the rendered output.
-- **Raw stdout renderer with escaping** — rejected: this is pi's model (inline differential rendering writes content to stdout), and it is the failure mode P20 documents. pi-rs's cell-diff renderer (ADR 0004) makes the sandbox possible by construction.
+Untrusted content enters pi-rs at several points. Each is a potential attack surface:
 
-## Consequences
+1. **Tool results** — the output of bash, read, write, edit, grep, and extension tools. Can contain arbitrary bytes including raw ANSI sequences. This is the P20 vector.
+2. **Extension frame buffers** (ADR 0003) — extension UI arrives as pre-rendered retained buffers (lines of text). An extension could emit raw ANSI in its `render(width)` output.
+3. **Provider streaming output** — LLM responses (assistant messages, thinking blocks, tool calls). A hostile provider or a man-in-the-middle could inject escape sequences.
+4. **Markdown content** — user messages and assistant messages are parsed by pulldown-cmark and rendered. Malicious markdown could carry escape sequences in code blocks or inline code.
+5. **Session files** (ADR 0008/0016) — JSONL read on `/resume`. If the file contains raw ANSI (from a prior unsanitized tool result), pi's inline renderer will execute it. pi-rs must write sanitized content (ADR 0016: Core is sole session writer) so the file is safe for both pi-rs and pi.
+6. **Tool execution itself** (open: this is the big one) — bash runs arbitrary commands, write/edit modify the filesystem, extension tools can do anything. The terminal-output sandbox does not address this. Does pi-rs need OS-level process sandboxing for tool calls? ADR 0002 discusses per-extension Worker sandboxing (post-parity). Tool-call sandboxing is a separate, harder question.
 
-- **The render thread writes to stdout only via the renderer's controlled diff** (cursor positioning + cell content writes from `Buffer::diff`). No code path in the render thread writes raw content to stdout. This is the sandbox boundary, enforced by code review and the single owned write path (ADR 0013: the render thread owns the terminal).
-- **Cell content is always data, never commands.** An `\x1b[?1049h` byte sequence stored in a cell is text that occupies cells; the terminal never interprets it because it arrives as cell-write data inside a synchronized-output frame, not as a raw escape sequence on stdout. The terminal only sees the renderer's cursor-move and cell-write commands.
-- **Session-file sanitization on write (ADR 0016).** When the Core writes a tool result to the session JSONL, it strips or escapes raw ANSI control sequences from the content before serialization. This makes the stored format safe for both pi-rs (sandboxed render) and pi (unsandboxed inline render). The sanitizer is a single function in the session-writer path, not scattered across render paths.
-- **Extension frame buffers (ADR 0003) are also sandboxed.** Extension UI arrives as pre-rendered retained buffers (lines of text). These lines are composited into the cell grid as data; they never reach stdout directly. An extension that emits raw ANSI in its `render(width)` output produces cells with that text, not terminal commands.
-- **This is a security boundary, not just a correctness guard.** A malicious tool result, a compromised extension, or a hostile provider response cannot hijack the terminal because none of them can write to stdout — they can only write to cells, and cells are data. The attack surface is the renderer's diff output, which is fully controlled by pi-rs.
-- **The sandbox does not protect against content that is visually misleading** (e.g., a tool result that looks like a system prompt). It protects against terminal-level hijacking (alt screen, mouse capture, scrollback wipe, arbitrary escape sequences). Social-engineering protection is a separate concern.
+## Candidate guard: the render path is a sandbox (NOT DECIDED)
+
+The render path could be structured as a sandbox: untrusted content enters cells as **data**, and the only bytes that reach stdout are the renderer's own controlled diff output (cursor moves, cell writes via `Buffer::diff`). No cell content is ever passed through to stdout as a raw terminal command. This is one invariant that covers boundaries 1-4 above.
+
+**Why this is a candidate, not a decision:**
+
+- It does not address boundary 5 (session files) — that needs sanitization on write, which is a separate code path (ADR 0016).
+- It does not address boundary 6 (tool execution) — that needs OS-level sandboxing, which is a different and much harder problem.
+- The invariant "stdout is only ever written via the renderer's controlled diff" must be **enforced**, not just documented. How? Code review? A type-level guarantee (the only `Write` impl that reaches stdout is the renderer's)? A test that asserts no raw stdout writes outside the render thread?
+- The cell-diff renderer (ADR 0004) makes this *possible* by construction, but "possible" is not "guaranteed." The invariant must be designed into the code, not assumed.
+
+## Open questions (need research + grilling before this ADR is decided)
+
+1. **Is the render-path sandbox sufficient, or do we need defense in depth** (sanitize at storage AND render)? If the render path is truly sandboxed, storage sanitization is only needed for pi interop (ADR 0008), not for pi-rs's own safety. But a miss in the render-path sandbox is a vulnerability — defense in depth may be worth the cost.
+2. **How is the sandbox invariant enforced?** A `Write` trait wrapper that only the renderer can construct? A compile-time guarantee (the stdout handle is never accessible outside the render thread)? A runtime assertion? Code review alone is not a security boundary.
+3. **What about the session file?** Sanitize on write (ADR 0016) is the candidate, but what exactly is stripped? All `\x1b` sequences? Only terminal-control sequences (CSI, OSC, DCS)? Preserve formatting ANSI (colors, bold) for re-rendering, or strip everything? This affects pi interop (ADR 0008: pi reads the same files).
+4. **Do tool calls need OS-level sandboxing?** bash runs arbitrary code. write/edit modify the filesystem. Extension tools can do anything. The terminal-output sandbox does not protect against a malicious bash command that deletes files, exfiltrates data, or launches processes. Is this ADR's scope (terminal security) or a separate ADR (tool-call sandboxing)? ADR 0002 discusses extension Worker sandboxing (post-parity); tool-call sandboxing may need its own ADR.
+5. **What is the threat model?** Is the attacker a malicious tool result (accidental or hostile), a compromised extension, a hostile provider, or a malicious session file? Different threat models may need different guards. The P20 incident was accidental (test output), not malicious — but the same vector is exploitable.
+6. **Relationship to ADR 0009 (fail-closed hooks).** ADR 0009 says hooks fail closed. Does the sandbox also fail closed (if sanitization fails, refuse to render rather than render raw content)?
+
+## What is NOT open (settled by P20 evidence)
+
+- The P20 vulnerability is real and observed. Raw ANSI in tool output hijacks the terminal. This is not theoretical.
+- pi's inline renderer is NOT sandboxed (it writes content to stdout directly). pi-rs must not repeat this.
+- The session file must be safe for pi (ADR 0008 interop). Whatever pi-rs stores, pi must be able to render without hijacking. This means sanitization on write is required regardless of the render-path sandbox decision.
