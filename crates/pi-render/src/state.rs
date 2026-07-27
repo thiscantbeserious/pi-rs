@@ -76,16 +76,24 @@ impl RenderState {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use crate::message::MessageRef;
 
     use super::*;
+
+    fn asst_ref() -> MessageRef {
+        MessageRef::Assistant {
+            content: vec![],
+            stop_reason: None,
+            timestamp: 0,
+        }
+    }
 
     /// A streaming text delta (nested in MessageUpdate) appends and marks dirty.
     #[test]
     fn apply_text_delta_appends_and_marks_dirty() {
         let mut s = RenderState::default();
         let dirty = s.apply(&[RenderEvent::MessageUpdate {
-            message: json!({}),
+            message: asst_ref(),
             event: AssistantMessageEvent::TextDelta {
                 content_index: 0,
                 delta: "hi".into(),
@@ -102,14 +110,14 @@ mod tests {
         let mut s = RenderState::default();
         s.apply(&[
             RenderEvent::MessageUpdate {
-                message: json!({}),
+                message: asst_ref(),
                 event: AssistantMessageEvent::TextDelta {
                     content_index: 0,
                     delta: "foo".into(),
                 },
             },
             RenderEvent::MessageUpdate {
-                message: json!({}),
+                message: asst_ref(),
                 event: AssistantMessageEvent::TextDelta {
                     content_index: 0,
                     delta: "bar".into(),
@@ -126,14 +134,14 @@ mod tests {
         let mut s = RenderState::default();
         s.apply(&[
             RenderEvent::MessageUpdate {
-                message: json!({}),
+                message: asst_ref(),
                 event: AssistantMessageEvent::ThinkingDelta {
                     content_index: 1,
                     delta: "hmm".into(),
                 },
             },
             RenderEvent::MessageUpdate {
-                message: json!({}),
+                message: asst_ref(),
                 event: AssistantMessageEvent::ToolCallDelta {
                     content_index: 2,
                     delta: "{}".into(),
@@ -148,7 +156,7 @@ mod tests {
     fn apply_streaming_boundary_marks_dirty() {
         let mut s = RenderState::default();
         let dirty = s.apply(&[RenderEvent::MessageUpdate {
-            message: json!({}),
+            message: asst_ref(),
             event: AssistantMessageEvent::TextStart { content_index: 0 },
         }]);
         assert!(dirty);

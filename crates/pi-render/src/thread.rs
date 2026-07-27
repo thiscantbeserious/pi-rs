@@ -230,10 +230,17 @@ impl FrameSink for CountingSink {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
+    use crate::message::MessageRef;
     use crate::stream::AssistantMessageEvent;
+
+    fn asst_ref() -> MessageRef {
+        MessageRef::Assistant {
+            content: vec![],
+            stop_reason: None,
+            timestamp: 0,
+        }
+    }
 
     /// ADR 0013: the render thread drains its event channel non-blocking. An
     /// empty channel returns immediately (no await, no block).
@@ -329,7 +336,7 @@ mod tests {
     /// Mirrors pi's message_update.assistantMessageEvent (L432).
     fn text_delta_event(content_index: u32, delta: &str) -> RenderEvent {
         RenderEvent::MessageUpdate {
-            message: json!({}),
+            message: asst_ref(),
             event: AssistantMessageEvent::TextDelta {
                 content_index,
                 delta: delta.into(),

@@ -14,16 +14,12 @@
 //! **Documented divergence from pi (§9.5):** pi carries a `partial:
 //! AssistantMessage` snapshot on every streaming variant. Under ADR 0013 the
 //! render thread owns the Retained Message Model and applies deltas
-//! incrementally, so the snapshot is redundant dead data and is omitted
-//! (PHILOSOPHY §5). The finalized message is carried on `Done`/`Error`.
-//!
-//! **Opaque payloads (§9.2 assumption):** the complex payloads (`ToolCall`,
-//! the finalized `AssistantMessage`) are carried as [`serde_json::Value`]
-//! until Step 7 (D-E) defines the typed `RenderMessage` parsed from
-//! pi-session's opaque `Value`. Primitive fields (`content_index`, `delta`,
-//! `content`) are typed now; their shapes are stable.
+//! incrementally, so the per-delta content snapshot is redundant dead data and
+//! is omitted (PHILOSOPHY §5). The mid-stream metadata channel is preserved
+//! via `message` on `MessageUpdate` (see [`event`](crate::event)).
 
-use serde_json::Value;
+use crate::message::ContentBlock;
+use crate::message::MessageRef;
 
 /// The stop reason for a completed stream. Mirrors pi's `StopReason` at
 /// `packages/ai/src/types.ts` [L382](https://github.com/earendil-works/pi/blob/083e61621276bff9f6faefab87ce07fcd98734e2/packages/ai/src/types.ts#L382):
@@ -48,7 +44,7 @@ pub enum StopReason {
 /// `content_index` identifies which content block of the in-flight assistant
 /// message the event targets (a message may interleave text, thinking, and
 /// tool-call blocks). pi: `contentIndex: number`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum AssistantMessageEvent {
     /// `start` (pi L492). Stream began.
     Start,
@@ -71,22 +67,28 @@ pub enum AssistantMessageEvent {
     /// `toolcall_delta` (pi L500). Tool-call input JSON delta appended.
     ToolCallDelta { content_index: u32, delta: String },
     /// `toolcall_end` (pi L501). The tool call finalized; `tool_call` is the
-    /// finalized `ToolCall` (opaque until Step 7, D-E).
+    /// finalized `ToolCall` (typed; see [`ContentBlock::ToolCall`]).
     ToolCallEnd {
         content_index: u32,
-        tool_call: Value,
+        tool_call: ContentBlock,
     },
     /// `done` (pi L502). Stream completed; `message` is the finalized
-    /// `AssistantMessage` (opaque until Step 7).
-    Done { reason: StopReason, message: Value },
+    /// `AssistantMessage` (typed render projection; see [`MessageRef`]).
+    Done {
+        reason: StopReason,
+        message: MessageRef,
+    },
     /// `error` (pi L503). Stream errored or aborted; `error` is the final
-    /// `AssistantMessage` with `stopReason` set (opaque until Step 7).
-    Error { reason: StopReason, error: Value },
+    /// message with `stop_reason` set (typed render projection).
+    Error {
+        reason: StopReason,
+        error: MessageRef,
+    },
 }
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use crate::message::{ContentBlock, MessageRef};
 
     use super::*;
 
@@ -119,23 +121,33 @@ mod tests {
         };
         let _ = AssistantMessageEvent::ToolCallEnd {
             content_index: 2,
-            tool_call: json!({}),
+            tool_call: ContentBlock::ToolCall {
+                id: "tc1".into(),
+                name: "bash".into(),
+                arguments: serde_json::json!({}),
+            },
         };
         let _ = AssistantMessageEvent::Done {
             reason: StopReason::Stop,
-            message: json!({}),
+            message: MessageRef::Assistant {
+                content: vec![],
+                stop_reason: Some(StopReason::Stop),
+                timestamp: 0,
+            },
         };
         let _ = AssistantMessageEvent::Error {
             reason: StopReason::Aborted,
-            error: json!({}),
+            error: MessageRef::Assistant {
+                content: vec![],
+                stop_reason: Some(StopReason::Aborted),
+                timestamp: 0,
+            },
         };
     }
 
     /// StopReason mirrors pi's five values (L382).
     #[test]
     fn stop_reason_has_five_variants() {
-        assert_eq!(format!("{:?}", StopReason::Stop), "Stop".to_string());
-        assert!(matches!(StopReason::Length, StopReason::Length));
         let all = [
             StopReason::Stop,
             StopReason::Length,

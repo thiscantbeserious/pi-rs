@@ -15,16 +15,25 @@
 //! `assistantMessageEvent` ([L432](https://github.com/earendil-works/pi/blob/083e61621276bff9f6faefab87ce07fcd98734e2/packages/agent/src/types.ts#L432)).
 //! Per PHILOSOPHY §9.5.
 //!
+//! **Typed payloads:** messages and content blocks are typed Rust types
+//! ([`MessageRef`](crate::message::MessageRef),
+//! [`ContentBlock`](crate::message::ContentBlock)), not `serde_json::Value`.
+//! The agent loop (Phase 3) sends typed structs with zero serialization;
+//! `pi-replay` (Step 7) parses `Value` → typed at the replay boundary. `Value`
+//! is used only for `ToolCall::arguments` and tool-execution
+//! `result`/`partial_result` (arbitrary model/tool data the renderer displays
+//! but never interprets). See ADR 0029.
+//!
 //! **No pi equivalent:** the render-control variants ([`Resize`],
 //! [`ThemeChanged`], [`FrameBufferUpdated`], [`Quit`]) are pi-rs-native
 //! (pi is single-process JS; the render-thread/tokio split is pi-rs-native,
 //! ADR 0013). [`FrameBufferUpdated`] is pi-rs-native to the protocol but
 //! preserves pi's `render(width)` shape (ADR 0003).
 //!
-//! **Opaque payloads (§9.2 assumption):** `AgentMessage`, `ToolCall`,
-//! `ToolResultMessage`, and the `args`/`result`/`partial_result` fields pi
-//! types as `any` are carried as [`serde_json::Value`] until Step 7 (D-E)
-//! defines the typed `RenderMessage`. Primitive fields are typed now.
+//! **Not `Clone`:** events flow one-way into the render thread (ADR 0013);
+//! the render thread consumes them, never clones them. Dropping `Clone`
+//! removes the footgun of accidentally copying megabyte image payloads on the
+//! frame path (GOALS goal 1).
 //!
 //! [`Resize`]: RenderEvent::Resize
 //! [`ThemeChanged`]: RenderEvent::ThemeChanged
@@ -33,6 +42,7 @@
 
 use serde_json::Value;
 
+use crate::message::MessageRef;
 use crate::stream::AssistantMessageEvent;
 
 /// A state change the tokio side signals to the render thread. The render
@@ -43,49 +53,53 @@ use crate::stream::AssistantMessageEvent;
 /// `AgentEvent` (types.ts L422-L437). The render controls are pi-rs-native.
 ///
 /// [`MessageEnd`]: RenderEvent::MessageEnd
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum RenderEvent {
     // --- Agent lifecycle (pi AgentEvent L424-L425) ---
     /// `agent_start` (pi L424). An agent run began.
     AgentStart,
     /// `agent_end` (pi L425). An agent run ended; `messages` is the final
-    /// `AgentMessage[]` (opaque until Step 7).
-    AgentEnd { messages: Vec<Value> },
+    /// `AgentMessage[]` (typed render projection).
+    AgentEnd { messages: Vec<MessageRef> },
 
     // --- Turn lifecycle (pi AgentEvent L427-L428) ---
     /// `turn_start` (pi L427). A turn (one assistant response + tool calls)
     /// began.
     TurnStart,
     /// `turn_end` (pi L428). A turn ended with its assistant `message` and
-    /// `tool_results` (opaque until Step 7).
+    /// `tool_results` (typed render projections).
     TurnEnd {
-        message: Value,
-        tool_results: Vec<Value>,
+        message: MessageRef,
+        tool_results: Vec<MessageRef>,
     },
 
     // --- Message lifecycle (pi AgentEvent L430-L433) ---
     /// `message_start` (pi L430). A message (user, assistant, or toolResult)
-    /// began; `message` is the `AgentMessage` (opaque until Step 7).
-    MessageStart { message: Value },
+    /// began; `message` is the typed render projection.
+    MessageStart { message: MessageRef },
     /// `message_update` (pi L432). Only emitted for assistant messages during
-    /// streaming. Carries the in-flight `message` and the streaming `event`
-    /// (pi's `assistantMessageEvent`), nested per pi's structure.
+    /// streaming. Carries the in-flight `message` (the mid-stream metadata
+    /// channel: usage/stop_reason/diagnostics change during the stream; delta
+    /// events carry none of those) and the streaming `event` (pi's
+    /// `assistantMessageEvent`), nested per pi's structure.
     MessageUpdate {
-        message: Value,
+        message: MessageRef,
         event: AssistantMessageEvent,
     },
     /// `message_end` (pi L433). A message finalized.
-    MessageEnd { message: Value },
+    MessageEnd { message: MessageRef },
 
     // --- Tool execution lifecycle (pi AgentEvent L435-L437) ---
     /// `tool_execution_start` (pi L435). A tool began executing. `args` is pi's
-    /// `any` (opaque).
+    /// `any` (arbitrary model-emitted JSON; the renderer displays, never
+    /// interprets).
     ToolExecutionStart {
         tool_call_id: String,
         tool_name: String,
         args: Value,
     },
     /// `tool_execution_update` (pi L436). A tool emitted a partial result.
+    /// `partial_result` is arbitrary tool data (displayed, not interpreted).
     ToolExecutionUpdate {
         tool_call_id: String,
         tool_name: String,
@@ -93,7 +107,8 @@ pub enum RenderEvent {
         partial_result: Value,
     },
     /// `tool_execution_end` (pi L437). A tool finished; `is_error` mirrors pi's
-    /// `isError: boolean`.
+    /// `isError: boolean`. `result` is arbitrary tool data (displayed, not
+    /// interpreted).
     ToolExecutionEnd {
         tool_call_id: String,
         tool_name: String,
@@ -120,7 +135,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::message::{ContentBlock, MessageRef};
     use crate::stream::StopReason;
+
+    fn asst_ref() -> MessageRef {
+        MessageRef::Assistant {
+            content: vec![],
+            stop_reason: None,
+            timestamp: 0,
+        }
+    }
 
     /// The 11 agent-loop variants mirror pi's AgentEvent (L422-L437), and the
     /// 4 render controls are pi-rs-native. 15 total.
@@ -130,18 +154,22 @@ mod tests {
         let _ = RenderEvent::AgentEnd { messages: vec![] };
         let _ = RenderEvent::TurnStart;
         let _ = RenderEvent::TurnEnd {
-            message: json!({}),
+            message: asst_ref(),
             tool_results: vec![],
         };
-        let _ = RenderEvent::MessageStart { message: json!({}) };
+        let _ = RenderEvent::MessageStart {
+            message: asst_ref(),
+        };
         let _ = RenderEvent::MessageUpdate {
-            message: json!({}),
+            message: asst_ref(),
             event: AssistantMessageEvent::TextDelta {
                 content_index: 0,
                 delta: "x".into(),
             },
         };
-        let _ = RenderEvent::MessageEnd { message: json!({}) };
+        let _ = RenderEvent::MessageEnd {
+            message: asst_ref(),
+        };
         let _ = RenderEvent::ToolExecutionStart {
             tool_call_id: "tc1".into(),
             tool_name: "bash".into(),
@@ -167,14 +195,15 @@ mod tests {
     }
 
     /// MessageUpdate nests AssistantMessageEvent, mirroring pi's
-    /// message_update.assistantMessageEvent (L432).
+    /// message_update.assistantMessageEvent (L432). The message field is the
+    /// mid-stream metadata channel (kept, not dropped — see ADR 0029).
     #[test]
     fn message_update_nests_streaming_event() {
         let ev = RenderEvent::MessageUpdate {
-            message: json!({ "role": "assistant" }),
+            message: asst_ref(),
             event: AssistantMessageEvent::Done {
                 reason: StopReason::Stop,
-                message: json!({}),
+                message: asst_ref(),
             },
         };
         match ev {
@@ -186,6 +215,32 @@ mod tests {
                         ..
                     }
                 ));
+            }
+            _ => panic!("must be MessageUpdate"),
+        }
+    }
+
+    /// MessageUpdate's message carries typed content (not Value): the render
+    /// thread reads content blocks directly, no deserialization.
+    #[test]
+    fn message_update_carries_typed_content() {
+        let msg = MessageRef::Assistant {
+            content: vec![ContentBlock::Text {
+                text: "hello".into(),
+            }],
+            stop_reason: None,
+            timestamp: 0,
+        };
+        let ev = RenderEvent::MessageUpdate {
+            message: msg,
+            event: AssistantMessageEvent::TextDelta {
+                content_index: 0,
+                delta: "!".into(),
+            },
+        };
+        match ev {
+            RenderEvent::MessageUpdate { message, .. } => {
+                assert_eq!(message.content().len(), 1);
             }
             _ => panic!("must be MessageUpdate"),
         }
