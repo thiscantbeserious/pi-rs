@@ -146,8 +146,8 @@ mod tests {
         }
     }
 
-    /// The 11 agent-loop variants mirror pi's AgentEvent (L422-L437), and the
-    /// 4 render controls are pi-rs-native. 15 total.
+    /// The 10 agent-loop variants mirror pi's AgentEvent (L422-L437), and the
+    /// 4 render controls are pi-rs-native. 14 total.
     #[test]
     fn render_event_variants_match_pi_plus_controls() {
         let _ = RenderEvent::AgentStart;

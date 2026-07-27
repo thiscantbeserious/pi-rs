@@ -145,10 +145,20 @@ impl RenderThread {
             .spawn(move || reader_loop(input, reader_tx, reader_quit))?;
 
         // Render thread: blocks on the channel, applies, draws (ADR 0013).
+        // If this spawn fails, clean up the already-running reader before
+        // returning Err (GOALS goal 2: no orphaned threads).
         let render_quit = quit_flag.clone();
-        let render = thread::Builder::new()
+        let render = match thread::Builder::new()
             .name("pi-render".into())
-            .spawn(move || run_loop(sink, rx, render_quit))?;
+            .spawn(move || run_loop(sink, rx, render_quit))
+        {
+            Ok(h) => h,
+            Err(e) => {
+                quit_flag.store(true, Ordering::Release);
+                let _ = reader.join();
+                return Err(e);
+            }
+        };
 
         Ok((
             RenderHandle {
