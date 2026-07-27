@@ -8,6 +8,7 @@
 
 pub mod event;
 pub mod state;
+pub mod stream;
 pub mod suspend;
 pub mod terminal;
 pub mod thread;

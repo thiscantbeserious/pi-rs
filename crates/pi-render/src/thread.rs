@@ -230,7 +230,10 @@ impl FrameSink for CountingSink {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
+    use crate::stream::AssistantMessageEvent;
 
     /// ADR 0013: the render thread drains its event channel non-blocking. An
     /// empty channel returns immediately (no await, no block).
@@ -248,8 +251,8 @@ mod tests {
     #[test]
     fn drain_collects_all_pending() {
         let (tx, mut rx) = mpsc::channel::<RenderEvent>(16);
-        tx.try_send(RenderEvent::TokenAppended("a".into())).unwrap();
-        tx.try_send(RenderEvent::TokenAppended("b".into())).unwrap();
+        tx.try_send(text_delta_event(0, "a")).unwrap();
+        tx.try_send(text_delta_event(0, "b")).unwrap();
         tx.try_send(RenderEvent::Quit).unwrap();
         let drained = drain_events(&mut rx);
         assert_eq!(drained.len(), 3, "drain must collect all pending events");
@@ -268,9 +271,7 @@ mod tests {
         // Send from a tokio task (the agent-loop side).
         let h = handle.clone();
         tokio::spawn(async move {
-            h.send(RenderEvent::TokenAppended("hi".into()))
-                .await
-                .unwrap();
+            h.send(text_delta_event(0, "hi")).await.unwrap();
         });
 
         // Wait for a frame to draw after the apply (≤16ms cadence per frame).
@@ -322,5 +323,17 @@ mod tests {
         let res = input.poll(Duration::from_millis(10)).unwrap();
         assert!(start.elapsed() >= Duration::from_millis(8));
         assert_eq!(res, None);
+    }
+
+    /// Build a MessageUpdate carrying a TextDelta (the streaming token event).
+    /// Mirrors pi's message_update.assistantMessageEvent (L432).
+    fn text_delta_event(content_index: u32, delta: &str) -> RenderEvent {
+        RenderEvent::MessageUpdate {
+            message: json!({}),
+            event: AssistantMessageEvent::TextDelta {
+                content_index,
+                delta: delta.into(),
+            },
+        }
     }
 }
