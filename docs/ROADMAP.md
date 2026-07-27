@@ -75,7 +75,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 **Deliverables:**
 
 - [x] Panic-safe terminal restore on every exit path (pitfall P15) — Step 1: `pi-render` crate skeleton, `Session::enter`/`restore_to`, panic hook, zero-size guard (ADR 0026)
-- [ ] Render thread + tokio split with render-thread-owned Retained Message Model (ADR 0013, ADR 0024)
+- [ ] Render thread + tokio split with render-thread-owned Retained Message Model (ADR 0013, ADR 0024, ADR 0030)
 - [ ] Alt screen, cell diff, synchronized-output detection with graceful degradation (ADR 0004, pitfall P12)
 - [ ] Grapheme-width handling with emoji/ZWJ/CJK test corpus (pitfall P13, ADR 0025)
 - [x] cargo-deny P16 guard in CI (ADR 0024)

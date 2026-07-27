@@ -15,6 +15,9 @@ ratatui = { workspace = true, default-features = false, features = [
   "crossterm",
 ] }
 crossterm.workspace = true
+# Opaque payloads for RenderEvent/AssistantMessageEvent until Step 7 (D-E)
+# defines the typed RenderMessage. §9.2 assumption.
+serde_json = "1"
 
 [dev-dependencies]
 insta.workspace = true
