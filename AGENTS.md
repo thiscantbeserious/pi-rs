@@ -1,6 +1,6 @@
 # pi-rs Agent Instructions
 
-Rust rewrite of [pi](https://github.com/earendil-works/pi). Phase 1 (walking skeleton) is active.
+Rust rewrite of [pi](https://github.com/earendil-works/pi). Phase 2 (render core) is active.
 
 Write short, clearly instructed sentences. No em dashes. No LLM slang (e.g. "load bearing"). No superficial words. Keep it simple and structured.
 
@@ -13,8 +13,14 @@ Read these in order. They override anything you think you know:
 3. `CONTEXT.md`: terms; use them exactly, avoid the listed synonyms
 4. `docs/adr/`: accepted decisions; never contradict silently, propose a superseding ADR
 5. `docs/ROADMAP.md`: phases, exit gates, armed triggers; don't start a phase before its gate passes
-6. `docs/pitfalls.md`: P1-P18; new pitfall, record with evidence before fixing
+6. `docs/pitfalls.md`: P1-P20; new pitfall, record with evidence before fixing
 7. `docs/research.md`: tooling verdicts; a finding that changes a decision needs a superseding ADR
+
+## Setup
+
+Git hooks (pre-push: fmt + clippy + test) auto-install via `cargo-husky`
+when you run `cargo test` or `cargo build` for the first time. No manual
+setup needed. Skip on a single push with `git push --no-verify`.
 
 ## Workflow
 
@@ -52,7 +58,7 @@ Every change follows one loop: understand, design, implement, land.
 
 ## Layout (ADR 0011, ADR 0021)
 
-`crates/{pi-core, pi-protocol, pi-replay, pi-rs}` + `host/` (Deno, vendored pi runtime). Protocol types in `pi-protocol`, generated via ts-rs into `host/protocol/`, freshness-checked by CI.
+`crates/{pi-core, pi-render, pi-protocol, pi-replay, pi-rs, pi-session}` + `host/` (Deno, vendored pi runtime). Protocol types in `pi-protocol`, generated via ts-rs into `host/protocol/`, freshness-checked by CI. Renderer in `pi-render` (ADR 0026).
 
 ## Open items
 
