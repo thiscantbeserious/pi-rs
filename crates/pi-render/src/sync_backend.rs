@@ -75,11 +75,13 @@ impl<W: Write> Backend for SyncBackend<W> {
         // Delegate cell writing to CrosstermBackend on our writer.
         // We reconstruct it per-call because writer_mut() is unstable.
         // This is cheap: CrosstermBackend::new is just wrapping the writer.
-        CrosstermBackend::new(&mut self.writer).draw(content)?;
+        let draw_result = CrosstermBackend::new(&mut self.writer).draw(content);
+        // Always emit ESU if BSU was emitted, even on draw error, so the
+        // terminal is never left stuck in synchronized-update mode (CodeRabbit).
         if self.mode_2026_enabled {
             self.writer.queue(EndSynchronizedUpdate)?;
         }
-        Ok(())
+        draw_result
     }
 
     fn hide_cursor(&mut self) -> io::Result<()> {
@@ -159,12 +161,18 @@ pub struct CrosstermInput;
 
 impl InputSource for CrosstermInput {
     fn poll(&mut self, timeout: Duration) -> io::Result<Option<InputEvent>> {
-        if event::poll(timeout)? {
-            if let Ok(CrosstermEvent::Key(key)) = event::read() {
-                return Ok(translate_key(key));
-            }
+        if !event::poll(timeout)? {
+            return Ok(None);
         }
-        Ok(None)
+        // Fail closed (ADR 0009): propagate read errors, do not swallow them
+        // into Ok(None) (CodeRabbit). An input read error stops the reader
+        // thread via the Err return.
+        match event::read()? {
+            CrosstermEvent::Key(key) => Ok(translate_key(key)),
+            // Non-key events (mouse, resize, focus) are ignored in Phase 2.
+            // Phase 3 adds mouse and resize routing.
+            _ => Ok(None),
+        }
     }
 }
 
@@ -293,5 +301,33 @@ mod tests {
             !output.contains("\x1b[?2026l"),
             "ESU must NOT be present in degrade mode"
         );
+    }
+
+    /// SyncBackend::draw emits ESU even when draw succeeds (BSU/ESU pairing).
+    /// This test verifies the ordering: BSU before draw, ESU after draw.
+    #[test]
+    fn sync_backend_draw_bsu_before_esu() {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+
+        let buf = Vec::new();
+        let mut backend = SyncBackend::new(buf, true);
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 5, 1));
+        buffer.set_string(0, 0, "hello", ratatui::style::Style::default());
+
+        backend
+            .draw(
+                buffer
+                    .diff(&Buffer::empty(Rect::new(0, 0, 5, 1)))
+                    .iter()
+                    .cloned(),
+            )
+            .unwrap();
+        backend.flush().unwrap();
+
+        let output = String::from_utf8_lossy(backend.writer_ref());
+        let bsu_pos = output.find("\x1b[?2026h").expect("BSU must be present");
+        let esu_pos = output.find("\x1b[?2026l").expect("ESU must be present");
+        assert!(bsu_pos < esu_pos, "BSU must come before ESU");
     }
 }
