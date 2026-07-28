@@ -378,6 +378,7 @@ mod tests {
         for i in 0..10 {
             state.push_message(text_msg(&format!("line {}", i)));
         }
+        state.render_at_width(20);
         state.recompute_scroll(5); // viewport height = 5
         let scroll = state.scroll_offset();
         let total = state.rendered_lines().len();

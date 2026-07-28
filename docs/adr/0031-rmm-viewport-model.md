@@ -1,6 +1,8 @@
 # Status: ACCEPTED. RMM viewport model: visible-window rendering with message-granular line cache
 
-ADR 0004 decided the Retained Message Model owns scroll state and the viewport is a pure function of it. ADR 0024 chose ratatui on crossterm as the terminal backend. Neither specified HOW the RMM and ratatui coexist: ratatui has no scrollback, no virtualization, and its `Buffer` is terminal-sized (width x height cells). This ADR specifies the viewport model, the rendering strategy, and the line cache that make a 10M+ token session render in O(viewport_height) per frame, not O(total_lines).
+**Implementation:** `docs/plans/phase-2-render-core.md` Step 3. Open decisions: SyncBackend wrapper and real crossterm InputSource/FrameSink impls land in Step 3 (TestBackend for tests); block-granular cache formalized in Step 5 (ADR 0010); interactive scrollback/copy-mode in Phase 3.
+
+ADR 0004 decided the Retained Message Model owns scroll state and the viewport is a pure function of it. ADR 0024 chose ratatui on crossterm as the terminal backend. Neither specified HOW the RMM and ratatui coexist: ratatui has no scrollback, no virtualization, and its `Buffer` is terminal-sized (width x height cells). This ADR specifies the viewport model, the rendering strategy, and the line cache that make a 10M+ token session render in O(viewport_height x viewport_width) per frame, not O(total_lines).
 
 ## Context
 
@@ -14,7 +16,7 @@ Researched against the pinned Oracle (v0.82.0, commit `083e6162`) and ratatui 0.
 
 ### Visible-window rendering
 
-The RMM holds the message list (`Vec<MessageRef>`) and a scroll offset (`usize`). The projection renders only the visible window (`scroll_offset..scroll_offset + viewport_height`) into ratatui's terminal-sized `Buffer` each frame. ratatui's `Buffer::diff` handles the cell-granular diff. This is O(viewport_height) per frame, not O(total_lines).
+The RMM holds the message list (`Vec<MessageRef>`) and a scroll offset (`usize`). The projection renders only the visible window (`scroll_offset..scroll_offset + viewport_height`) into ratatui's terminal-sized `Buffer` each frame. ratatui's `Buffer::diff` handles the cell-granular diff. This is O(viewport_height x viewport_width) per frame, not O(total_lines).
 
 - The viewport is a pure function of `(message_list, scroll_offset, width, height)` (ADR 0004).
 - ratatui renders only `Frame::area`; we feed it only the visible slice.
@@ -50,7 +52,7 @@ On resize, the line cache is invalidated (width changed, cached lines are wrong)
 
 ## Considered options
 
-- **Render all messages every frame (like pi)**: rejected. pi re-renders all components (with caching) and its `previousLines` array grows with content. For 10M+ token sessions without compaction, the projection walk is O(N) per frame even with caching. The visible-window model is O(viewport_height).
+- **Render all messages every frame (like pi)**: rejected. pi re-renders all components (with caching) and its `previousLines` array grows with content. For 10M+ token sessions without compaction, the projection walk is O(N) per frame even with caching. The visible-window model is O(viewport_height x viewport_width).
 - **Offscreen Buffer for scrollback (tui-scrollview pattern)**: rejected. Allocates a `Buffer` sized to the entire content (O(total_lines *width* cell_size)). For 10M tokens that is gigabytes. The visible-window model needs no offscreen buffer.
 - **Let ratatui manage the viewport**: rejected. ratatui has no scrollback concept, no auto-scroll-to-tail, no resize re-wrap. P5 (unstable scrollback) would not be guarded. Contradicts ADR 0004.
 - **No line cache (re-render from scratch each frame)**: rejected. Re-parses and re-wraps every visible message every frame. The message-granular cache makes finalized messages O(1) to render (return cached lines).
@@ -60,8 +62,8 @@ On resize, the line cache is invalidated (width changed, cached lines are wrong)
 
 ## Consequences
 
-- **Frame cost is O(viewport_height), not O(total_lines).** A 24-row viewport renders 24 rows of cells per frame regardless of session size. ratatui's `Buffer::diff` then reduces the terminal writes to only changed cells.
-- **Memory is O(total_messages) for the message list, not O(total_lines) for rendered content.** The line cache holds rendered lines only for finalized messages in the visible window (evicted when scrolled out of view in Phase 3; in Phase 2 all messages are cached since there's no interactive scroll). Step 7 (replay) reads entries incrementally.
+- **Frame cost is O(viewport_height x viewport_width), not O(total_lines).** A 24-row viewport renders 24 rows of cells per frame regardless of session size. ratatui's `Buffer::diff` then reduces the terminal writes to only changed cells.
+- **Memory is O(total_messages) for the message list, not O(total_lines) for rendered content.** The line cache holds rendered lines for finalized messages. In Phase 2, all messages are cached (there is no interactive scroll, so no eviction). In Phase 3, rendered lines are evicted when scrolled out of view (the cache holds only the visible window plus a margin). Step 7 (replay) reads entries incrementally.
 - **The RMM owns scroll state.** `scroll_offset` is part of `RenderState`. The viewport is a pure function of `(message_list, scroll_offset, width, height)`. Phase 3 adds user-controlled `scroll_offset` (interactive scrollback, search, copy-mode).
 - **`pi-render` gains ratatui `Terminal` + `Backend` types in the real `FrameSink` impl.** Step 2's `CountingSink` stays for tests. The `FrameSink` trait is unchanged (`draw(&RenderState)`); the real impl owns the `Terminal` internally.
 - **`SyncBackend` is a new struct in `pi-render`.** It wraps `CrosstermBackend` and is the sole place mode 2026 is injected. The capability flag is set at startup from the mode 2026 query.
