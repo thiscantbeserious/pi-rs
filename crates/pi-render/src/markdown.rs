@@ -88,17 +88,42 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
     let engine = RunefixWidth;
     let normalized = normalize_markdown(text);
     let parser = Parser::new_ext(&normalized, markdown_options());
-    let mut lines = Vec::new();
+    let mut lines: Vec<RenderedLine> = Vec::new();
     let mut in_code_block = false;
     let mut code_lang = String::new();
     let mut code_content = String::new();
     let mut in_heading = false;
     let mut prev_was_paragraph = false;
     let mut current_style = Style::default();
+    // Inline buffer: accumulates Text, Code, and SoftBreak content into a
+    // single line's segments. Flushed at block boundaries (paragraph end,
+    // heading end, hard break, rule, code block).
+    let mut inline_segments: Vec<StyledSegment> = Vec::new();
+
+    // Flush the inline buffer into wrapped lines.
+    let flush_inline = |segments: &mut Vec<StyledSegment>, lines: &mut Vec<RenderedLine>| {
+        if segments.is_empty() {
+            return;
+        }
+        // Join all segments into one string, then wrap by width.
+        // Each segment carries its own style, so we wrap per-segment.
+        // For simplicity in Step 5 (ASCII-scoped), concatenate segments
+        // with their styles and wrap the combined text.
+        let combined: String = segments.iter().map(|s| s.text.as_str()).collect();
+        let wrapped = engine.wrap_text(&combined, width);
+        for line_text in wrapped {
+            // Apply the first segment's style to the whole line (Step 5
+            // simplification; Step 6 theme integration refines per-segment).
+            let style = segments.first().map(|s| s.style).unwrap_or_default();
+            lines.push(RenderedLine::styled(line_text, style));
+        }
+        segments.clear();
+    };
 
     for event in parser {
         match event {
             Event::Start(Tag::CodeBlock(kind)) => {
+                flush_inline(&mut inline_segments, &mut lines);
                 in_code_block = true;
                 code_lang = match kind {
                     CodeBlockKind::Fenced(lang) => lang.into_string(),
@@ -108,7 +133,6 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
             }
             Event::End(TagEnd::CodeBlock) => {
                 in_code_block = false;
-                // A closed code block is finalized (has a closing fence).
                 let highlighted =
                     block_cache.get_or_highlight(&code_content, &code_lang, width, true);
                 lines.extend(highlighted);
@@ -117,10 +141,12 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
                 code_content.push_str(&text);
             }
             Event::Start(Tag::Heading { .. }) => {
+                flush_inline(&mut inline_segments, &mut lines);
                 in_heading = true;
                 current_style = Style::default().add_modifier(Modifier::BOLD);
             }
             Event::End(TagEnd::Heading { .. }) => {
+                flush_inline(&mut inline_segments, &mut lines);
                 in_heading = false;
                 current_style = Style::default();
             }
@@ -130,23 +156,41 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
                 }
             }
             Event::End(TagEnd::Paragraph) => {
+                flush_inline(&mut inline_segments, &mut lines);
                 prev_was_paragraph = true;
             }
             Event::Text(text) if in_heading => {
-                wrap_markdown_text_styled(&text, width, &engine, current_style, &mut lines);
+                inline_segments.push(StyledSegment {
+                    text: text.into_string(),
+                    style: current_style,
+                });
             }
             Event::Text(text) => {
-                wrap_markdown_text(&text, width, &engine, &mut lines);
+                inline_segments.push(StyledSegment {
+                    text: text.into_string(),
+                    style: Style::default(),
+                });
             }
             Event::Code(code) => {
-                // Inline code: append to current line with code style.
-                let style = Style::default().fg(Color::Yellow);
-                lines.push(RenderedLine::styled(code.into_string(), style));
+                // Inline code: buffer as a segment with code style.
+                inline_segments.push(StyledSegment {
+                    text: code.into_string(),
+                    style: Style::default().fg(Color::Yellow),
+                });
             }
-            Event::SoftBreak | Event::HardBreak => {
-                lines.push(RenderedLine::plain(""));
+            Event::SoftBreak => {
+                // Soft break: inline spacing (space), not a new line.
+                inline_segments.push(StyledSegment {
+                    text: " ".to_string(),
+                    style: Style::default(),
+                });
+            }
+            Event::HardBreak => {
+                // Hard break: flush current inline content, then blank line.
+                flush_inline(&mut inline_segments, &mut lines);
             }
             Event::Rule => {
+                flush_inline(&mut inline_segments, &mut lines);
                 lines.push(RenderedLine::styled(
                     "---".to_string(),
                     Style::default().fg(Color::DarkGray),
@@ -156,9 +200,8 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
         }
     }
 
-    // pulldown-cmark emits End(CodeBlock) even for unclosed fences,
-    // so the tail handler below never fires. The block is finalized by
-    // the parser. This is correct: the parser handles the streaming edge.
+    // Flush any remaining inline content.
+    flush_inline(&mut inline_segments, &mut lines);
 
     if lines.is_empty() {
         lines.push(RenderedLine::plain(""));
@@ -207,33 +250,6 @@ fn is_partial_closing_fence(line: &str) -> bool {
 /// Get pulldown-cmark options (enable tables, strikethrough, task lists).
 fn markdown_options() -> Options {
     Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH
-}
-
-/// Wrap text into rendered lines using the grapheme-aware width engine.
-fn wrap_markdown_text(
-    text: &str,
-    width: u16,
-    engine: &dyn GraphemeWidth,
-    lines: &mut Vec<RenderedLine>,
-) {
-    let wrapped = engine.wrap_text(text, width);
-    for line_text in wrapped {
-        lines.push(RenderedLine::styled(line_text, Style::default()));
-    }
-}
-
-/// Wrap text into rendered lines with a specific style (e.g. headings).
-fn wrap_markdown_text_styled(
-    text: &str,
-    width: u16,
-    engine: &dyn GraphemeWidth,
-    style: Style,
-    lines: &mut Vec<RenderedLine>,
-) {
-    let wrapped = engine.wrap_text(text, width);
-    for line_text in wrapped {
-        lines.push(RenderedLine::styled(line_text, style));
-    }
 }
 
 /// Highlight a code block using tree-sitter-highlight (ADR 0010, ADR 0033).
@@ -653,12 +669,21 @@ mod tests {
         assert!(!lines.is_empty());
     }
 
-    /// Inline code is rendered with a distinct style.
+    /// Inline code is composed into the same line as surrounding text.
     #[test]
     fn inline_code_renders() {
         let mut cache = BlockCache::new();
         let lines = render_markdown("Use `print()` to output", 80, &mut cache);
-        assert!(!lines.is_empty());
+        // Inline code must NOT split the line. All content on one line.
+        assert_eq!(lines.len(), 1, "inline code must compose into one line");
+        // The line text contains all parts.
+        let combined: String = lines[0].segments.iter().map(|s| s.text.as_str()).collect();
+        assert!(combined.contains("Use"), "line must contain 'Use'");
+        assert!(
+            combined.contains("print()"),
+            "line must contain inline code"
+        );
+        assert!(combined.contains("output"), "line must contain 'output'");
     }
 
     // === Coverage tests ===
@@ -763,12 +788,16 @@ mod tests {
         assert!(!is_partial_closing_fence("`a")); // mixed
     }
 
-    /// Soft break renders a blank line.
+    /// Soft break renders as inline spacing, not a new line.
     #[test]
-    fn soft_break_renders_blank_line() {
+    fn soft_break_renders_inline_spacing() {
         let mut cache = BlockCache::new();
         let lines = render_markdown("line one\nline two", 80, &mut cache);
-        assert!(lines.len() >= 2, "soft break should produce multiple lines");
+        // Soft break is a space, not a new line. Both parts on one line.
+        assert_eq!(lines.len(), 1, "soft break must compose into one line");
+        let combined: String = lines[0].segments.iter().map(|s| s.text.as_str()).collect();
+        assert!(combined.contains("line one"), "must contain first part");
+        assert!(combined.contains("line two"), "must contain second part");
     }
 
     /// Hard break (backslash + newline) renders a blank line.
