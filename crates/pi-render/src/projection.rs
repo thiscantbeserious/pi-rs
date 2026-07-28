@@ -117,7 +117,10 @@ fn write_line_to_buffer(
 
     for segment in &line.segments {
         for (grapheme, width) in engine.grapheme_widths(&segment.text) {
-            if x >= x_limit {
+            // Check if the grapheme fits before the viewport edge.
+            // A width-2 grapheme at the last column must not be written
+            // (its trailing cell would overflow, P13 width-drift corruption).
+            if x + width > x_limit {
                 break; // clip at viewport width
             }
             let cell = buf.cell_mut((x, y)).expect("cell in bounds");
@@ -125,7 +128,8 @@ fn write_line_to_buffer(
             cell.set_style(segment.style);
             if width > 0 {
                 cell.set_diff_option(CellDiffOption::ForcedWidth(
-                    std::num::NonZero::new(width).unwrap_or(std::num::NonZero::new(1).unwrap()),
+                    // Safe: width > 0 is guaranteed by the if guard.
+                    std::num::NonZero::new(width).expect("width is non-zero inside if width > 0"),
                 ));
             }
             // Reset trailing cells for width-2 graphemes.
