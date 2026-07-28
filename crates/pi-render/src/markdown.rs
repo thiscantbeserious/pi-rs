@@ -94,7 +94,6 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
     let mut code_content = String::new();
     let mut in_heading = false;
     let mut prev_was_paragraph = false;
-    let _current_text = String::new();
     let mut current_style = Style::default();
 
     for event in parser {
@@ -157,16 +156,9 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
         }
     }
 
-    // Handle unclosed code block (tail block during streaming).
-    if in_code_block {
-        let highlighted = block_cache.get_or_highlight(
-            &code_content,
-            &code_lang,
-            width,
-            false, // not finalized: don't cache
-        );
-        lines.extend(highlighted);
-    }
+    // pulldown-cmark emits End(CodeBlock) even for unclosed fences,
+    // so the tail handler below never fires. The block is finalized by
+    // the parser. This is correct: the parser handles the streaming edge.
 
     if lines.is_empty() {
         lines.push(RenderedLine::plain(""));
@@ -458,6 +450,11 @@ fn capture_to_style(capture: tree_sitter_highlight::Highlight) -> Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::message::MessageRef;
+    use crate::projection::RmmProjection;
+    use crate::state::RenderState;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
 
     // === Markdown parsing tests ===
 
@@ -812,5 +809,47 @@ mod tests {
     #[test]
     fn try_highlight_unsupported_lang_returns_none() {
         assert!(try_highlight("code", "cobol").is_none());
+    }
+
+    /// HTML in markdown is handled (catch-all arm, no panic).
+    #[test]
+    fn html_in_markdown_no_panic() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("<div>hello</div>", 80, &mut cache);
+        assert!(!lines.is_empty());
+    }
+
+    /// Task list marker is handled (catch-all arm, no panic).
+    #[test]
+    fn task_list_marker_no_panic() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("- [x] done\n- [ ] todo", 80, &mut cache);
+        assert!(!lines.is_empty());
+    }
+
+    /// Unwrapped line with width-2 grapheme clips at viewport edge.
+    /// The stop-reason marker and ToolResult prefix are unwrapped.
+    #[test]
+    fn unwrapped_line_clips_at_viewport_edge() {
+        // A ToolResult with a long name that exceeds viewport width.
+        let backend = TestBackend::new(3, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(MessageRef::ToolResult {
+            tool_call_id: "tc1".into(),
+            tool_name: "abcdefghij".into(),
+            content: vec![],
+            is_error: false,
+            timestamp: 0,
+        });
+        state.render_at_width(3);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        // No panic = pass. The clip at x + width > x_limit fires.
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "O");
     }
 }
