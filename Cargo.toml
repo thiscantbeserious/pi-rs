@@ -26,7 +26,7 @@ pi-session = { path = "crates/pi-session" }
 
 # Render-thread deps (ADR 0024/0026). Workspace-unified so the P16
 # duplicate-version guard (cargo deny) holds across crates.
-ratatui = "0.30"
+ratatui = { version = "0.30", default-features = false }
 crossterm = "0.29"
 
 # Shared dependencies, referenced by crates as `insta.workspace = true` so

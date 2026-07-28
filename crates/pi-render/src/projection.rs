@@ -14,13 +14,14 @@
 //! PHILOSOPHY §9.5.
 
 use ratatui::buffer::Buffer;
+use ratatui::buffer::CellDiffOption;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
 use crate::message::{ContentBlock, MessageRef};
 use crate::state::RenderState;
+use crate::width::{GraphemeWidth, RunefixWidth};
 
 /// A ratatui widget that projects the RMM visible window into the Buffer.
 /// Used inside `terminal.try_draw(|frame| frame.render_widget(...))`.
@@ -38,6 +39,7 @@ impl Widget for RmmProjection<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let scroll = self.state.scroll_offset();
         let height = area.height as usize;
+        let engine = RunefixWidth;
 
         // Compute which rendered lines are visible.
         let rendered = self.state.rendered_lines();
@@ -45,31 +47,15 @@ impl Widget for RmmProjection<'_> {
         let start = scroll.min(total_lines.saturating_sub(height));
         let visible_end = (start + height).min(total_lines);
 
-        // Render visible lines into the buffer.
+        // Render visible lines into the buffer via direct cell writing
+        // (ADR 0032). Bypass set_string (which uses unicode-width and skips
+        // zero-width graphemes). Write cells directly with ForcedWidth.
         for (i, line) in rendered[start..visible_end].iter().enumerate() {
             let y = area.y + i as u16;
             if y >= area.bottom() {
                 break;
             }
-            let spans: Vec<Span> = line
-                .segments
-                .iter()
-                .map(|s| Span::styled(s.text.clone(), s.style))
-                .collect();
-            if spans.is_empty() {
-                buf.set_string(area.x, y, "", Style::default());
-            } else {
-                let rat_line = Line::from(spans);
-                rat_line.render(
-                    Rect {
-                        x: area.x,
-                        y,
-                        width: area.width,
-                        height: 1,
-                    },
-                    buf,
-                );
-            }
+            write_line_to_buffer(line, area.x, y, area.width, buf, &engine);
         }
 
         // Composite frame buffers (ADR 0003). Synthetic in Phase 2.
@@ -114,7 +100,55 @@ impl RenderedLine {
     }
 }
 
-/// A frame buffer region (ADR 0003). Synthetic in Phase 2.
+/// Write a RenderedLine to the buffer via direct cell writing (ADR 0032).
+/// Segments text into grapheme clusters via the GraphemeWidth engine, writes
+/// each grapheme as a cell with ForcedWidth, and resets trailing cells for
+/// width-2 graphemes. Clips at max_width.
+fn write_line_to_buffer(
+    line: &RenderedLine,
+    x_start: u16,
+    y: u16,
+    max_width: u16,
+    buf: &mut Buffer,
+    engine: &dyn GraphemeWidth,
+) {
+    let mut x = x_start;
+    let x_limit = x_start.saturating_add(max_width);
+
+    for segment in &line.segments {
+        for (grapheme, width) in engine.grapheme_widths(&segment.text) {
+            // Skip zero-width graphemes (control chars, lone ZWJ, etc.).
+            // ratatui's set_string does the same. These graphemes are not
+            // rendered and do not advance the cursor.
+            if width == 0 {
+                continue;
+            }
+            // Check if the grapheme fits before the viewport edge.
+            // A width-2 grapheme at the last column must not be written
+            // (its trailing cell would overflow, P13 width-drift corruption).
+            if x + width > x_limit {
+                break; // clip at viewport width
+            }
+            let cell = buf.cell_mut((x, y)).expect("cell in bounds");
+            cell.set_symbol(grapheme);
+            cell.set_style(segment.style);
+            cell.set_diff_option(CellDiffOption::ForcedWidth(
+                // Safe: width > 0 is guaranteed by the skip above.
+                std::num::NonZero::new(width).expect("width is non-zero"),
+            ));
+            // Reset trailing cells for width-2 graphemes.
+            for offset in 1..width {
+                let trailing_x = x + offset;
+                if trailing_x < x_limit {
+                    buf.cell_mut((trailing_x, y))
+                        .expect("cell in bounds")
+                        .reset();
+                }
+            }
+            x += width;
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrameBuffer {
     /// Lines of pre-rendered text.
@@ -228,25 +262,16 @@ fn render_content_block(block: &ContentBlock, width: usize, lines: &mut Vec<Rend
     }
 }
 
-/// Word-wrap text at `width` columns. ASCII-scoped (char count, not grapheme
-/// width). Step 4 replaces this with grapheme-cluster-aware wrapping.
+/// Wrap text into lines at `width` columns using grapheme-aware width
+/// (ADR 0025, ADR 0032). Replaces the Step 3 ASCII-scoped char-count wrapping.
 fn wrap_text(text: &str, width: usize, style: Style, lines: &mut Vec<RenderedLine>) {
     if width == 0 {
         return;
     }
-    for paragraph in text.split('\n') {
-        if paragraph.is_empty() {
-            lines.push(RenderedLine::plain(""));
-            continue;
-        }
-        let chars: Vec<char> = paragraph.chars().collect();
-        let mut start = 0;
-        while start < chars.len() {
-            let end = (start + width).min(chars.len());
-            let chunk: String = chars[start..end].iter().collect();
-            lines.push(RenderedLine::styled(chunk, style));
-            start = end;
-        }
+    let engine = RunefixWidth;
+    let wrapped = engine.wrap_text(text, width as u16);
+    for line_text in wrapped {
+        lines.push(RenderedLine::styled(line_text, style));
     }
 }
 
@@ -729,5 +754,232 @@ mod tests {
         assert_eq!(stop_reason_str(StopReason::ToolUse), "toolUse");
         assert_eq!(stop_reason_str(StopReason::Error), "error");
         assert_eq!(stop_reason_str(StopReason::Aborted), "aborted");
+    }
+
+    // === P13 corpus integration tests (cell-diff corruption from width drift) ===
+
+    /// CJK character renders as width-2 cell (ForcedWidth set).
+    #[test]
+    fn p13_cjk_renders_width_2() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("你"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let cell = buf.cell((0u16, 0u16)).expect("cell exists");
+        assert_eq!(cell.symbol(), "你");
+    }
+
+    /// ZWJ family emoji renders as a single cell (not split).
+    #[test]
+    fn p13_zwj_family_single_cell() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("👨‍👩‍👧‍👦"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let cell = buf.cell((0u16, 0u16)).expect("cell exists");
+        assert_eq!(cell.symbol(), "👨‍👩‍👧‍👦", "ZWJ family must be a single cell");
+    }
+
+    /// Combining mark groups with base (not dropped).
+    #[test]
+    fn p13_combining_mark_not_dropped() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("e\u{0301}"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let cell = buf.cell((0u16, 0u16)).expect("cell exists");
+        assert_eq!(
+            cell.symbol(),
+            "e\u{0301}",
+            "combining mark must group with base"
+        );
+    }
+
+    /// Width-2 grapheme clips at viewport width (does not overflow).
+    #[test]
+    fn p13_width_2_clips_at_boundary() {
+        let backend = TestBackend::new(3, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        // "abc你" at width 3: "abc" fills the line, "你" (width 2) doesn't fit.
+        state.push_message(text_msg("abc你"));
+        state.render_at_width(3);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        // Cell 0 = 'a', cell 1 = 'b', cell 2 = 'c'. "你" wrapped to next line.
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "a");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "b");
+        assert_eq!(buf.cell((2u16, 0u16)).expect("cell").symbol(), "c");
+    }
+
+    /// Mixed ASCII + CJK + emoji renders correctly.
+    #[test]
+    fn p13_mixed_text_renders() {
+        let backend = TestBackend::new(20, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("Hi你😀"));
+        state.render_at_width(20);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "H");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "i");
+        assert_eq!(buf.cell((2u16, 0u16)).expect("cell").symbol(), "你");
+        // "你" is width 2, so cell 3 is reset (trailing).
+        // Emoji "😀" is at cell 4 (width 2).
+        assert_eq!(buf.cell((4u16, 0u16)).expect("cell").symbol(), "😀");
+    }
+
+    /// Halfwidth katakana renders as width 1.
+    #[test]
+    fn p13_halfwidth_katakana_width_1() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("ｶｷ"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "ｶ");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "ｷ");
+    }
+
+    /// VS16 groups with base (single cell).
+    #[test]
+    fn p13_vs16_single_cell() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("❤️"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let cell = buf.cell((0u16, 0u16)).expect("cell exists");
+        assert_eq!(cell.symbol(), "❤️", "VS16 must group with base");
+    }
+
+    // === Edge case tests ===
+
+    /// Zero-width graphemes (control chars) are skipped in cell writing.
+    #[test]
+    fn edge_control_char_skipped() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        // Bell (\x07) is width 0 in runefix-core; must be skipped.
+        state.push_message(text_msg("a\u{0007}b"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "a");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "b");
+    }
+
+    /// Tab is expanded to 3 spaces in cell writing.
+    #[test]
+    fn edge_tab_expanded_to_spaces() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("a\tb"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "a");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), " ");
+        assert_eq!(buf.cell((2u16, 0u16)).expect("cell").symbol(), " ");
+        assert_eq!(buf.cell((3u16, 0u16)).expect("cell").symbol(), " ");
+        assert_eq!(buf.cell((4u16, 0u16)).expect("cell").symbol(), "b");
+    }
+
+    /// Empty segment produces no cells.
+    #[test]
+    fn edge_empty_segment_no_cells() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg(""));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        // No panic = pass. Empty text produces one blank line.
+    }
+
+    /// Multiple content blocks produce separate lines (not concatenated).
+    #[test]
+    fn edge_multiple_blocks_separate_lines() {
+        let backend = TestBackend::new(10, 2);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        // Two text blocks in one message: "Hi" + "World" (separate blocks).
+        state.push_message(MessageRef::Assistant {
+            content: vec![
+                ContentBlock::Text { text: "Hi".into() },
+                ContentBlock::Text {
+                    text: "World".into(),
+                },
+            ],
+            stop_reason: None,
+            timestamp: 0,
+        });
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        // "Hi" on line 0, "World" on line 1 (separate blocks = separate lines).
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "H");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "i");
+        assert_eq!(buf.cell((0u16, 1u16)).expect("cell").symbol(), "W");
     }
 }
