@@ -83,6 +83,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [x] P20: ANSI injection from tool output — documented (pitfalls.md, ADRs 0027/0028 proposed)
 - [x] Streaming markdown pipeline: pulldown-cmark + tree-sitter with block caching (ADR 0010), incomplete-code highlight tests (pitfall P18) — Step 5 (#14)
 - [ ] Theme loading from the shared ~/.pi tree (ADRs 0012/0020)
+- [ ] Keybindings: full key parsing (Kitty protocol, legacy sequences, modifyOtherKeys, CSI-u printable decoding), keybinding registry (~80 IDs matching pi), user config from ~/.pi/agent/keybindings.json, conflict detection, legacy name migration (ADR pending)
 - [ ] Frame-time and input-latency benchmarks under synthetic streaming workloads, wired into CI
 
 **Exit gate 🚦**
