@@ -60,7 +60,12 @@ pub(crate) fn reader_loop<I: InputSource>(
                 }
             }
             Ok(None) => {}
-            Err(_) => {} // flaky input read; continue
+            Err(_) => {
+                // Fail closed (ADR 0009): an input read error stops the
+                // reader thread. The render thread still runs (it may have
+                // events to process), but no new input arrives until restart.
+                break;
+            }
         }
     }
 }
@@ -100,22 +105,20 @@ mod tests {
         // Returns immediately because quit_flag is already set.
     }
 
-    /// reader_loop handles input errors gracefully (continues).
+    /// reader_loop fails closed on input error (ADR 0009): stops the reader.
     #[test]
-    fn reader_loop_handles_input_error() {
-        struct ErrorInput(Arc<AtomicBool>);
+    fn reader_loop_fails_closed_on_input_error() {
+        struct ErrorInput;
         impl InputSource for ErrorInput {
             fn poll(&mut self, _timeout: Duration) -> io::Result<Option<InputEvent>> {
-                self.0.store(true, Ordering::Release);
                 Err(io::Error::other("flaky"))
             }
         }
         let (tx, _rx) = std::sync::mpsc::sync_channel::<LoopEvent>(16);
         let quit_flag = Arc::new(AtomicBool::new(false));
-        let qf = quit_flag.clone();
-        // ErrorInput sets quit_flag on first poll, so the loop exits.
-        reader_loop(ErrorInput(qf), tx, quit_flag);
-        // No panic = pass.
+        // ErrorInput returns Err on first poll; reader_loop breaks (fail closed).
+        reader_loop(ErrorInput, tx, quit_flag);
+        // No panic = pass. The reader stopped on error.
     }
 
     /// reader_loop sends InputEvent::Quit through the channel.

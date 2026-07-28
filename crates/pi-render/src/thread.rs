@@ -322,21 +322,24 @@ mod tests {
         thread.join().unwrap();
     }
 
-    /// send() returns an error when the channel is full (backpressure).
+    /// send() returns a full error when the channel is at capacity (backpressure).
     #[test]
     fn send_returns_error_when_full() {
-        let observed = Arc::new(AtomicBool::new(false));
-        let (handle, thread) =
-            RenderThread::spawn(NullInput, CountingSink::new(observed), 1).unwrap();
+        // Construct a RenderHandle without a worker so nothing drains the
+        // channel. This makes the backpressure test deterministic.
+        let (tx, _rx) = mpsc::sync_channel::<LoopEvent>(1);
+        let handle = RenderHandle {
+            tx,
+            quit_flag: Arc::new(AtomicBool::new(false)),
+        };
         // Fill the channel (capacity 1).
         handle.send(text_delta_event(0, "x")).unwrap();
-        // Next send should fail (full).
-        let result = handle.send(text_delta_event(0, "y"));
-        // It may succeed or fail depending on timing (reader may have drained).
-        // The important thing: it doesn't panic.
-        let _ = result;
-        handle.quit();
-        thread.join().unwrap();
+        // Next send must fail (full).
+        let err = handle.send(text_delta_event(0, "y")).unwrap_err();
+        assert!(
+            err.full,
+            "send on a full channel must return SendError with full=true"
+        );
     }
 
     /// RenderHandle is Clone + Debug.
