@@ -19,6 +19,13 @@ serde_json = "1"
 # Grapheme-cluster-aware width engine (ADR 0025, ADR 0032). Behind the
 # GraphemeWidth trait (width.rs) so a swap is one impl.
 runefix-core = "0.1"
+# Markdown pipeline (ADR 0010, ADR 0033).
+pulldown-cmark = { version = "0.12", default-features = false }
+tree-sitter-highlight = "0.26"
+tree-sitter-rust = "0.24"
+tree-sitter-javascript = "0.25"
+tree-sitter-bash = "0.25"
+tree-sitter-json = "0.24"
 
 [dev-dependencies]
 insta.workspace = true
