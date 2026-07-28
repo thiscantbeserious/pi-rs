@@ -16,3 +16,4 @@ pub mod stream;
 pub mod suspend;
 pub mod terminal;
 pub mod thread;
+pub mod width;

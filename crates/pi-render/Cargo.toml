@@ -11,13 +11,16 @@ name = "pi_render"
 path = "src/lib.rs"
 
 [dependencies]
-ratatui = { workspace = true, default-features = false, features = [
+ratatui = { workspace = true, features = [
   "crossterm",
 ] }
 crossterm.workspace = true
 # Opaque payloads for RenderEvent/AssistantMessageEvent until Step 7 (D-E)
 # defines the typed RenderMessage. §9.2 assumption.
 serde_json = "1"
+# Grapheme-cluster-aware width engine (ADR 0025, ADR 0032). Behind the
+# GraphemeWidth trait (width.rs) so a swap is one impl.
+runefix-core = "0.1"
 
 [dev-dependencies]
 insta.workspace = true
