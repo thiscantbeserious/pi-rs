@@ -236,4 +236,209 @@ mod tests {
         let dirty = s.apply(&[]);
         assert!(!dirty);
     }
+
+    /// MessageStart pushes a message and marks dirty.
+    #[test]
+    fn apply_message_start_pushes_and_marks_dirty() {
+        let mut s = RenderState::default();
+        let dirty = s.apply(&[RenderEvent::MessageStart {
+            message: asst_ref(),
+        }]);
+        assert!(dirty);
+        assert_eq!(s.messages().len(), 1);
+    }
+
+    /// MessageEnd clears the streaming index and marks dirty.
+    #[test]
+    fn apply_message_end_clears_streaming_and_marks_dirty() {
+        let mut s = RenderState::default();
+        s.push_message(asst_ref());
+        let dirty = s.apply(&[RenderEvent::MessageEnd {
+            message: asst_ref(),
+        }]);
+        assert!(dirty);
+    }
+
+    /// FrameBufferUpdated marks dirty.
+    #[test]
+    fn apply_frame_buffer_updated_marks_dirty() {
+        let mut s = RenderState::default();
+        let dirty = s.apply(&[RenderEvent::FrameBufferUpdated]);
+        assert!(dirty);
+    }
+
+    /// Resize at a new width invalidates the cache and marks dirty.
+    #[test]
+    fn apply_resize_invalidates_cache() {
+        let mut s = RenderState {
+            cached_width: 80,
+            ..Default::default()
+        };
+        let dirty = s.apply(&[RenderEvent::Resize { cols: 40, rows: 24 }]);
+        assert!(dirty);
+        assert_eq!(s.cached_width, 40);
+    }
+
+    /// Resize at the same width does not invalidate but still marks dirty.
+    #[test]
+    fn apply_resize_same_width_still_dirty() {
+        let mut s = RenderState {
+            cached_width: 80,
+            ..Default::default()
+        };
+        let dirty = s.apply(&[RenderEvent::Resize { cols: 80, rows: 24 }]);
+        assert!(dirty);
+    }
+
+    /// Agent-loop events (AgentStart, TurnStart, etc.) mark dirty.
+    #[test]
+    fn apply_agent_loop_events_mark_dirty() {
+        let mut s = RenderState::default();
+        let dirty = s.apply(&[
+            RenderEvent::AgentStart,
+            RenderEvent::TurnStart,
+            RenderEvent::AgentEnd { messages: vec![] },
+        ]);
+        assert!(dirty);
+    }
+
+    /// Tool execution events mark dirty.
+    #[test]
+    fn apply_tool_execution_events_mark_dirty() {
+        let mut s = RenderState::default();
+        let dirty = s.apply(&[
+            RenderEvent::ToolExecutionStart {
+                tool_call_id: "tc1".into(),
+                tool_name: "bash".into(),
+                args: serde_json::json!({}),
+            },
+            RenderEvent::ToolExecutionUpdate {
+                tool_call_id: "tc1".into(),
+                tool_name: "bash".into(),
+                args: serde_json::json!({}),
+                partial_result: serde_json::json!({}),
+            },
+            RenderEvent::ToolExecutionEnd {
+                tool_call_id: "tc1".into(),
+                tool_name: "bash".into(),
+                result: serde_json::json!({}),
+                is_error: false,
+            },
+        ]);
+        assert!(dirty);
+    }
+
+    /// Other MessageUpdate events (start/end, done, error) mark dirty.
+    #[test]
+    fn apply_streaming_boundary_marks_dirty() {
+        let mut s = RenderState::default();
+        let dirty = s.apply(&[RenderEvent::MessageUpdate {
+            message: asst_ref(),
+            event: AssistantMessageEvent::TextStart { content_index: 0 },
+        }]);
+        assert!(dirty);
+    }
+
+    /// append_delta without a streaming message is a no-op (no panic).
+    #[test]
+    fn append_delta_without_streaming_is_noop() {
+        let mut s = RenderState::default();
+        s.append_delta("orphan");
+        assert!(s.messages().is_empty());
+    }
+
+    /// ThinkingDelta appends to the current message.
+    #[test]
+    fn apply_thinking_delta_marks_dirty() {
+        let mut s = RenderState::default();
+        s.push_message(asst_ref());
+        let dirty = s.apply(&[RenderEvent::MessageUpdate {
+            message: asst_ref(),
+            event: AssistantMessageEvent::ThinkingDelta {
+                content_index: 0,
+                delta: "hmm".into(),
+            },
+        }]);
+        assert!(dirty);
+    }
+
+    /// ToolCallDelta marks dirty.
+    #[test]
+    fn apply_toolcall_delta_marks_dirty() {
+        let mut s = RenderState::default();
+        s.push_message(asst_ref());
+        let dirty = s.apply(&[RenderEvent::MessageUpdate {
+            message: asst_ref(),
+            event: AssistantMessageEvent::ToolCallDelta {
+                content_index: 0,
+                delta: "{}".into(),
+            },
+        }]);
+        assert!(dirty);
+    }
+
+    /// recompute_scroll pins to tail.
+    #[test]
+    fn recompute_scroll_pins_to_tail() {
+        let mut s = RenderState {
+            cached_lines: (0..10).map(|_| RenderedLine::plain("x")).collect(),
+            ..Default::default()
+        };
+        s.recompute_scroll(5);
+        assert_eq!(s.scroll_offset(), 5);
+    }
+
+    /// recompute_scroll with fewer lines than viewport gives 0.
+    #[test]
+    fn recompute_scroll_underflow_is_zero() {
+        let mut s = RenderState {
+            cached_lines: vec![RenderedLine::plain("x")],
+            ..Default::default()
+        };
+        s.recompute_scroll(10);
+        assert_eq!(s.scroll_offset(), 0);
+    }
+
+    /// render_at_width renders messages and clears dirty.
+    #[test]
+    fn render_at_width_renders_and_clears_dirty() {
+        let mut s = RenderState::default();
+        s.push_message(MessageRef::Assistant {
+            content: vec![ContentBlock::Text { text: "hi".into() }],
+            stop_reason: None,
+            timestamp: 0,
+        });
+        s.render_at_width(80);
+        assert!(!s.dirty);
+        assert!(!s.rendered_lines().is_empty());
+    }
+
+    /// render_at_width at same width with no dirty flag returns cached.
+    #[test]
+    fn render_at_width_same_width_uses_cache() {
+        let mut s = RenderState::default();
+        s.push_message(MessageRef::Assistant {
+            content: vec![ContentBlock::Text { text: "hi".into() }],
+            stop_reason: None,
+            timestamp: 0,
+        });
+        s.render_at_width(80);
+        let count1 = s.rendered_lines().len();
+        s.render_at_width(80);
+        let count2 = s.rendered_lines().len();
+        assert_eq!(count1, count2);
+    }
+
+    /// add_frame_buffer adds and marks dirty.
+    #[test]
+    fn add_frame_buffer_works() {
+        let mut s = RenderState::default();
+        s.add_frame_buffer(FrameBuffer {
+            lines: vec!["x".into()],
+            col: 0,
+            row: 0,
+        });
+        assert_eq!(s.frame_buffers().len(), 1);
+        assert!(s.dirty);
+    }
 }

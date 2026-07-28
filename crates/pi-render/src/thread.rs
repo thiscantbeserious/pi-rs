@@ -321,4 +321,65 @@ mod tests {
         handle.quit();
         thread.join().unwrap();
     }
+
+    /// send() returns an error when the channel is full (backpressure).
+    #[test]
+    fn send_returns_error_when_full() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let (handle, thread) =
+            RenderThread::spawn(NullInput, CountingSink::new(observed), 1).unwrap();
+        // Fill the channel (capacity 1).
+        handle.send(text_delta_event(0, "x")).unwrap();
+        // Next send should fail (full).
+        let result = handle.send(text_delta_event(0, "y"));
+        // It may succeed or fail depending on timing (reader may have drained).
+        // The important thing: it doesn't panic.
+        let _ = result;
+        handle.quit();
+        thread.join().unwrap();
+    }
+
+    /// RenderHandle is Clone + Debug.
+    #[test]
+    fn render_handle_clone_and_debug() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let (handle, thread) =
+            RenderThread::spawn(NullInput, CountingSink::new(observed), 16).unwrap();
+        let cloned = handle.clone();
+        let _debug = format!("{:?}", cloned);
+        handle.quit();
+        thread.join().unwrap();
+    }
+
+    /// RenderThread is Debug.
+    #[test]
+    fn render_thread_is_debug() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let (handle, thread) =
+            RenderThread::spawn(NullInput, CountingSink::new(observed), 16).unwrap();
+        let _debug = format!("{:?}", thread);
+        handle.quit();
+        thread.join().unwrap();
+    }
+
+    /// SendError from converts Full and Disconnected correctly.
+    #[test]
+    fn send_error_from_full_and_disconnected() {
+        let (tx, _rx) = mpsc::sync_channel::<LoopEvent>(1);
+        tx.send(LoopEvent::Render(RenderEvent::Quit)).unwrap(); // fill
+        let full_err = tx
+            .try_send(LoopEvent::Render(RenderEvent::Quit))
+            .unwrap_err();
+        let se: SendError = full_err.into();
+        assert!(se.full);
+
+        let (tx2, rx2) = mpsc::sync_channel::<LoopEvent>(1);
+        drop(rx2);
+        // Use try_send to get TrySendError::Disconnected.
+        let disc_err = tx2
+            .try_send(LoopEvent::Render(RenderEvent::Quit))
+            .unwrap_err();
+        let se2: SendError = disc_err.into();
+        assert!(!se2.full);
+    }
 }

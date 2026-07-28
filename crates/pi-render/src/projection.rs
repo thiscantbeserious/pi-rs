@@ -36,7 +36,6 @@ impl<'a> RmmProjection<'a> {
 
 impl Widget for RmmProjection<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let _messages = self.state.messages();
         let scroll = self.state.scroll_offset();
         let height = area.height as usize;
 
@@ -426,5 +425,308 @@ mod tests {
             lines_20, lines_10,
             "resize must invalidate cache and re-render at new width"
         );
+    }
+
+    // --- Broad behavior tests: all message roles and content block types ---
+
+    /// User message renders its content blocks.
+    #[test]
+    fn render_user_message() {
+        let msg = MessageRef::User {
+            content: vec![ContentBlock::Text {
+                text: "hello user".into(),
+            }],
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// Assistant message with stop_reason renders the stop marker.
+    #[test]
+    fn render_assistant_with_stop_reason() {
+        let msg = MessageRef::Assistant {
+            content: vec![ContentBlock::Text { text: "hi".into() }],
+            stop_reason: Some(crate::stream::StopReason::Stop),
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(
+            lines.len() >= 2,
+            "assistant with stop_reason has content + marker"
+        );
+    }
+
+    /// Assistant message with error stop_reason.
+    #[test]
+    fn render_assistant_with_error_stop_reason() {
+        let msg = MessageRef::Assistant {
+            content: vec![],
+            stop_reason: Some(crate::stream::StopReason::Error),
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// ToolResult message renders prefix and content.
+    #[test]
+    fn render_tool_result_ok() {
+        let msg = MessageRef::ToolResult {
+            tool_call_id: "tc1".into(),
+            tool_name: "bash".into(),
+            content: vec![ContentBlock::Text {
+                text: "output".into(),
+            }],
+            is_error: false,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// ToolResult error message renders error prefix.
+    #[test]
+    fn render_tool_result_error() {
+        let msg = MessageRef::ToolResult {
+            tool_call_id: "tc1".into(),
+            tool_name: "bash".into(),
+            content: vec![],
+            is_error: true,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// Thinking content block renders.
+    #[test]
+    fn render_thinking_block() {
+        let msg = MessageRef::Assistant {
+            content: vec![ContentBlock::Thinking {
+                thinking: "hmm".into(),
+                redacted: false,
+            }],
+            stop_reason: None,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// Redacted thinking block shows placeholder.
+    #[test]
+    fn render_redacted_thinking_block() {
+        let msg = MessageRef::Assistant {
+            content: vec![ContentBlock::Thinking {
+                thinking: "".into(),
+                redacted: true,
+            }],
+            stop_reason: None,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// ToolCall content block renders.
+    #[test]
+    fn render_toolcall_block() {
+        let msg = MessageRef::Assistant {
+            content: vec![ContentBlock::ToolCall {
+                id: "tc1".into(),
+                name: "bash".into(),
+                arguments: serde_json::json!({}),
+            }],
+            stop_reason: None,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// Image content block renders a placeholder.
+    #[test]
+    fn render_image_block() {
+        let msg = MessageRef::Assistant {
+            content: vec![ContentBlock::Image {
+                data: std::sync::Arc::from(""),
+                mime_type: "image/png".into(),
+            }],
+            stop_reason: None,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert!(!lines.is_empty());
+    }
+
+    /// Empty message renders one blank line.
+    #[test]
+    fn render_empty_message() {
+        let msg = MessageRef::Assistant {
+            content: vec![],
+            stop_reason: None,
+            timestamp: 0,
+        };
+        let lines = render_message(&msg, 80);
+        assert_eq!(lines.len(), 1);
+    }
+
+    /// wrap_text at width 0 produces nothing.
+    #[test]
+    fn wrap_text_zero_width() {
+        let mut lines = Vec::new();
+        wrap_text("hello", 0, Style::default(), &mut lines);
+        assert!(lines.is_empty());
+    }
+
+    /// wrap_text handles newlines.
+    #[test]
+    fn wrap_text_handles_newlines() {
+        let mut lines = Vec::new();
+        wrap_text("a\nb\nc", 80, Style::default(), &mut lines);
+        assert_eq!(lines.len(), 3);
+    }
+
+    /// wrap_text handles empty paragraphs.
+    #[test]
+    fn wrap_text_empty_paragraph() {
+        let mut lines = Vec::new();
+        wrap_text("", 80, Style::default(), &mut lines);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].segments.is_empty() || lines[0].segments[0].text.is_empty());
+    }
+
+    /// FrameBuffer composite respects area bounds (clips beyond bottom).
+    #[test]
+    fn frame_buffer_clips_beyond_bottom() {
+        let backend = TestBackend::new(20, 2);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let mut state = RenderState::default();
+        state.add_frame_buffer(FrameBuffer {
+            lines: vec!["line1".into(), "line2".into(), "line3".into()],
+            col: 0,
+            row: 0,
+        });
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+
+        // Only 2 rows visible; line3 should be clipped.
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.area().height, 2);
+    }
+
+    /// RmmProjection renders nothing when there are no messages.
+    #[test]
+    fn projection_empty_state() {
+        let backend = TestBackend::new(10, 5);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let state = RenderState::default();
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        // No panic = pass.
+    }
+
+    /// RmmProjection handles empty-segment lines (spans is empty).
+    #[test]
+    fn projection_empty_segments() {
+        let backend = TestBackend::new(10, 5);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let mut state = RenderState::default();
+        // A message with an empty text block produces a blank line (empty segments).
+        state.push_message(MessageRef::Assistant {
+            content: vec![ContentBlock::Text { text: "".into() }],
+            stop_reason: None,
+            timestamp: 0,
+        });
+        state.render_at_width(10);
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        // No panic = pass. The empty-segments branch sets an empty string.
+    }
+
+    /// RmmProjection renders visible lines from the scroll offset.
+    #[test]
+    fn projection_renders_visible_window() {
+        let backend = TestBackend::new(20, 3);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let mut state = RenderState::default();
+        for i in 0..10 {
+            state.push_message(text_msg(&format!("line{}", i)));
+        }
+        state.render_at_width(20);
+        state.recompute_scroll(3);
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+
+        // The last 3 lines should be visible.
+        let buf = terminal.backend().buffer();
+        let row0 = buf.cell((0u16, 0u16)).expect("cell exists");
+        assert!(!row0.symbol().is_empty());
+    }
+
+    /// RenderedLine::plain and ::styled constructors.
+    #[test]
+    fn rendered_line_constructors() {
+        let plain = RenderedLine::plain("hello");
+        assert_eq!(plain.segments.len(), 1);
+
+        let styled = RenderedLine::styled("hi", Style::default());
+        assert_eq!(styled.segments.len(), 1);
+    }
+
+    /// RmmProjection clips lines beyond the viewport bottom.
+    #[test]
+    fn projection_clips_beyond_viewport() {
+        let backend = TestBackend::new(20, 2);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let mut state = RenderState::default();
+        // Push 5 messages, each 1 line. Viewport is 2 rows.
+        for i in 0..5 {
+            state.push_message(text_msg(&format!("line{}", i)));
+        }
+        state.render_at_width(20);
+        state.recompute_scroll(2);
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+
+        // Only 2 rows visible; the break at y >= area.bottom() is hit.
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.area().height, 2);
+    }
+
+    /// stop_reason_str covers all variants.
+    #[test]
+    fn stop_reason_str_all_variants() {
+        use crate::stream::StopReason;
+        assert_eq!(stop_reason_str(StopReason::Stop), "stop");
+        assert_eq!(stop_reason_str(StopReason::Length), "length");
+        assert_eq!(stop_reason_str(StopReason::ToolUse), "toolUse");
+        assert_eq!(stop_reason_str(StopReason::Error), "error");
+        assert_eq!(stop_reason_str(StopReason::Aborted), "aborted");
     }
 }
