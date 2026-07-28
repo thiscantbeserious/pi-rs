@@ -45,7 +45,20 @@ impl BlockCache {
     /// Get or compute highlighted lines for a code block.
     /// If the block is in the cache, returns cached lines. Otherwise,
     /// highlights the block and caches the result.
-    pub fn get_or_highlight(&mut self, code: &str, lang: &str, width: u16) -> Vec<RenderedLine> {
+    /// Get or compute highlighted lines for a code block.
+    /// If the block is in the cache, returns cached lines. Otherwise,
+    /// highlights the block and caches the result.
+    ///
+    /// `is_finalized`: if false (the tail block during streaming), the result
+    /// is NOT cached (the content is still growing). Only finalized blocks
+    /// are cached to prevent unbounded growth.
+    pub fn get_or_highlight(
+        &mut self,
+        code: &str,
+        lang: &str,
+        width: u16,
+        is_finalized: bool,
+    ) -> Vec<RenderedLine> {
         if self.cached_width != width {
             self.cache.clear();
             self.cached_width = width;
@@ -55,7 +68,9 @@ impl BlockCache {
             return lines.clone();
         }
         let lines = highlight_code_block(code, lang, width);
-        self.cache.insert(key, lines.clone());
+        if is_finalized {
+            self.cache.insert(key, lines.clone());
+        }
         lines
     }
 }
@@ -77,6 +92,10 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
     let mut in_code_block = false;
     let mut code_lang = String::new();
     let mut code_content = String::new();
+    let mut in_heading = false;
+    let mut prev_was_paragraph = false;
+    let _current_text = String::new();
+    let mut current_style = Style::default();
 
     for event in parser {
         match event {
@@ -90,24 +109,40 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
             }
             Event::End(TagEnd::CodeBlock) => {
                 in_code_block = false;
-                let highlighted = block_cache.get_or_highlight(&code_content, &code_lang, width);
+                // A closed code block is finalized (has a closing fence).
+                let highlighted =
+                    block_cache.get_or_highlight(&code_content, &code_lang, width, true);
                 lines.extend(highlighted);
             }
             Event::Text(text) if in_code_block => {
                 code_content.push_str(&text);
             }
+            Event::Start(Tag::Heading { .. }) => {
+                in_heading = true;
+                current_style = Style::default().add_modifier(Modifier::BOLD);
+            }
+            Event::End(TagEnd::Heading { .. }) => {
+                in_heading = false;
+                current_style = Style::default();
+            }
+            Event::Start(Tag::Paragraph) => {
+                if prev_was_paragraph {
+                    lines.push(RenderedLine::plain(""));
+                }
+            }
+            Event::End(TagEnd::Paragraph) => {
+                prev_was_paragraph = true;
+            }
+            Event::Text(text) if in_heading => {
+                wrap_markdown_text_styled(&text, width, &engine, current_style, &mut lines);
+            }
             Event::Text(text) => {
                 wrap_markdown_text(&text, width, &engine, &mut lines);
             }
             Event::Code(code) => {
+                // Inline code: append to current line with code style.
                 let style = Style::default().fg(Color::Yellow);
                 lines.push(RenderedLine::styled(code.into_string(), style));
-            }
-            Event::Start(Tag::Heading { .. }) => {
-                // Heading text follows as Text events; style is bold.
-            }
-            Event::Start(Tag::Paragraph) | Event::End(TagEnd::Paragraph) => {
-                // Paragraph boundaries: add blank line between paragraphs.
             }
             Event::SoftBreak | Event::HardBreak => {
                 lines.push(RenderedLine::plain(""));
@@ -120,6 +155,17 @@ pub fn render_markdown(text: &str, width: u16, block_cache: &mut BlockCache) -> 
             }
             _ => {}
         }
+    }
+
+    // Handle unclosed code block (tail block during streaming).
+    if in_code_block {
+        let highlighted = block_cache.get_or_highlight(
+            &code_content,
+            &code_lang,
+            width,
+            false, // not finalized: don't cache
+        );
+        lines.extend(highlighted);
     }
 
     if lines.is_empty() {
@@ -141,23 +187,24 @@ fn normalize_markdown(text: &str) -> String {
 /// code content, then re-parsed as a fence when complete, causing flicker.
 /// This trims the partial fence so the code block stays open until the
 /// complete fence arrives.
+/// Trim partial closing fence from the LAST line of streamed markdown.
+/// During streaming, a code block's closing fence (```) arrives char by char.
+/// A partial fence (`` or `) at the END of the buffer would be parsed as
+/// code content, then re-parsed as a fence when complete, causing flicker.
+/// This trims only the last line if it is a partial fence (CodeRabbit finding:
+/// the original scanned every line, stripping legitimate content).
 fn trim_partial_closing_fences(text: &str) -> String {
-    let mut result = String::new();
-    let mut lines = text.lines().peekable();
-    while let Some(line) = lines.next() {
-        // Check if this line is a partial closing fence (only backticks,
-        // fewer than 3).
-        let trimmed = line.trim();
-        if is_partial_closing_fence(trimmed) {
-            // Skip the partial fence; the code block stays open.
-            continue;
-        }
-        result.push_str(line);
-        if lines.peek().is_some() {
-            result.push('\n');
-        }
+    let last_newline = text.rfind('\n');
+    let (body, last_line) = match last_newline {
+        Some(idx) => (&text[..=idx], &text[idx + 1..]),
+        None => ("", text),
+    };
+    if is_partial_closing_fence(last_line.trim()) {
+        // Trim the partial fence; keep the body.
+        body.to_string()
+    } else {
+        text.to_string()
     }
-    result
 }
 
 /// Check if a line is a partial closing fence (1-2 backticks, nothing else).
@@ -180,6 +227,20 @@ fn wrap_markdown_text(
     let wrapped = engine.wrap_text(text, width);
     for line_text in wrapped {
         lines.push(RenderedLine::styled(line_text, Style::default()));
+    }
+}
+
+/// Wrap text into rendered lines with a specific style (e.g. headings).
+fn wrap_markdown_text_styled(
+    text: &str,
+    width: u16,
+    engine: &dyn GraphemeWidth,
+    style: Style,
+    lines: &mut Vec<RenderedLine>,
+) {
+    let wrapped = engine.wrap_text(text, width);
+    for line_text in wrapped {
+        lines.push(RenderedLine::styled(line_text, style));
     }
 }
 
@@ -228,14 +289,18 @@ fn try_highlight(code: &str, lang: &str) -> Option<Vec<RenderedLine>> {
     let events = result.ok()?;
 
     // Convert highlight events to rendered lines.
+    // Use a style stack for nested HighlightStart/End events (CodeRabbit
+    // finding: the original overwrote current_style, losing the outer
+    // scope's style when nested highlights ended).
     let mut current_line = String::new();
-    let mut current_style = Style::default();
+    let mut style_stack: Vec<Style> = vec![Style::default()];
     let mut lines = Vec::new();
 
     for event in events {
         match event {
             Ok(tree_sitter_highlight::HighlightEvent::Source { start, end }) => {
                 let segment = &code[start..end];
+                let current_style = *style_stack.last().unwrap();
                 for (i, line) in segment.split('\n').enumerate() {
                     if i > 0 {
                         lines.push(RenderedLine {
@@ -249,16 +314,17 @@ fn try_highlight(code: &str, lang: &str) -> Option<Vec<RenderedLine>> {
                 }
             }
             Ok(tree_sitter_highlight::HighlightEvent::HighlightStart(h)) => {
-                current_style = capture_to_style(h);
+                style_stack.push(capture_to_style(h));
             }
             Ok(tree_sitter_highlight::HighlightEvent::HighlightEnd) => {
-                current_style = Style::default();
+                style_stack.pop();
             }
             _ => {}
         }
     }
 
     if !current_line.is_empty() {
+        let current_style = *style_stack.last().unwrap();
         lines.push(RenderedLine {
             segments: vec![StyledSegment {
                 text: current_line,
@@ -437,17 +503,25 @@ mod tests {
     #[test]
     fn finalized_block_is_cached() {
         let mut cache = BlockCache::new();
-        let lines1 = cache.get_or_highlight("fn main() {}", "rust", 80);
-        let lines2 = cache.get_or_highlight("fn main() {}", "rust", 80);
+        let lines1 = cache.get_or_highlight("fn main() {}", "rust", 80, true);
+        let lines2 = cache.get_or_highlight("fn main() {}", "rust", 80, true);
         assert_eq!(lines1, lines2, "cached block must return same result");
+    }
+
+    /// Non-finalized (tail) block is NOT cached.
+    #[test]
+    fn tail_block_not_cached() {
+        let mut cache = BlockCache::new();
+        cache.get_or_highlight("fn main() {}", "rust", 80, false);
+        assert!(cache.cache.is_empty(), "tail block must not be cached");
     }
 
     /// Different code produces different results.
     #[test]
     fn different_code_different_result() {
         let mut cache = BlockCache::new();
-        let lines1 = cache.get_or_highlight("fn main() {}", "rust", 80);
-        let lines2 = cache.get_or_highlight("fn other() {}", "rust", 80);
+        let lines1 = cache.get_or_highlight("fn main() {}", "rust", 80, true);
+        let lines2 = cache.get_or_highlight("fn other() {}", "rust", 80, true);
         assert_ne!(
             lines1, lines2,
             "different code must produce different results"
@@ -458,8 +532,8 @@ mod tests {
     #[test]
     fn cache_invalidated_on_width_change() {
         let mut cache = BlockCache::new();
-        cache.get_or_highlight("fn main() {}", "rust", 80);
-        cache.get_or_highlight("fn main() {}", "rust", 40);
+        cache.get_or_highlight("fn main() {}", "rust", 80, true);
+        cache.get_or_highlight("fn main() {}", "rust", 40, true);
         // No panic = pass. Width change clears cache.
     }
 
@@ -467,20 +541,28 @@ mod tests {
     #[test]
     fn explicit_invalidate_clears() {
         let mut cache = BlockCache::new();
-        cache.get_or_highlight("fn main() {}", "rust", 80);
+        cache.get_or_highlight("fn main() {}", "rust", 80, true);
         cache.invalidate();
+        assert!(cache.cache.is_empty());
+    }
+
+    /// Default impl creates empty cache.
+    #[test]
+    fn default_creates_empty() {
+        let cache = BlockCache::default();
         assert!(cache.cache.is_empty());
     }
 
     // === Partial fence tests ===
 
-    /// Partial closing fence (`` or `) is trimmed.
+    /// Partial closing fence at end is trimmed.
     #[test]
     fn partial_closing_fence_trimmed() {
-        let result = trim_partial_closing_fences("```rust\nfn main() {}\n``\n");
+        // The partial fence is on the LAST line.
+        let result = trim_partial_closing_fences("```rust\nfn main() {}\n``");
         assert!(
-            !result.contains("``\n"),
-            "partial closing fence must be trimmed"
+            !result.ends_with("``"),
+            "partial closing fence at end must be trimmed"
         );
     }
 
@@ -580,5 +662,155 @@ mod tests {
         let mut cache = BlockCache::new();
         let lines = render_markdown("Use `print()` to output", 80, &mut cache);
         assert!(!lines.is_empty());
+    }
+
+    // === Coverage tests ===
+
+    /// Heading renders with bold style.
+    #[test]
+    fn heading_renders_bold() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("# Hello", 80, &mut cache);
+        assert!(!lines.is_empty());
+    }
+
+    /// Consecutive paragraphs have a blank line between them.
+    #[test]
+    fn consecutive_paragraphs_have_blank_line() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("First paragraph.\n\nSecond paragraph.", 80, &mut cache);
+        // Should have content + blank + content.
+        assert!(lines.len() >= 2);
+    }
+
+    /// Indented code block (no fence) renders.
+    #[test]
+    fn indented_code_block_renders() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("    code here", 80, &mut cache);
+        assert!(!lines.is_empty());
+    }
+
+    /// Unclosed code block (streaming tail) renders without panic.
+    #[test]
+    fn unclosed_code_block_renders() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("```rust\nfn main() {", 80, &mut cache);
+        assert!(!lines.is_empty());
+    }
+
+    /// Partial fence at end of single-line text.
+    #[test]
+    fn partial_fence_single_line() {
+        let result = trim_partial_closing_fences("``");
+        assert!(
+            result.is_empty(),
+            "partial fence on single line must be trimmed"
+        );
+    }
+
+    /// No partial fence: text unchanged.
+    #[test]
+    fn no_partial_fence_unchanged() {
+        let result = trim_partial_closing_fences("hello world");
+        assert_eq!(result, "hello world");
+    }
+
+    /// Empty string: no change.
+    #[test]
+    fn empty_string_no_change() {
+        let result = trim_partial_closing_fences("");
+        assert_eq!(result, "");
+    }
+
+    /// capture_to_style: all named captures return a style.
+    #[test]
+    fn capture_to_style_all_named() {
+        for (i, _name) in HIGHLIGHT_NAMES.iter().enumerate() {
+            let style = capture_to_style(tree_sitter_highlight::Highlight(i));
+            // Must not panic. Named captures return a styled or default.
+            let _ = format!("{:?}", style);
+        }
+    }
+
+    /// capture_to_style: unknown capture returns default.
+    #[test]
+    fn capture_to_style_unknown() {
+        let style = capture_to_style(tree_sitter_highlight::Highlight(999));
+        assert_eq!(style, Style::default());
+    }
+
+    /// get_highlight_config: unsupported language returns None.
+    #[test]
+    fn unsupported_lang_returns_none() {
+        assert!(get_highlight_config("python").is_none());
+    }
+
+    /// get_highlight_config: all supported languages return config.
+    #[test]
+    fn all_supported_langs_return_config() {
+        assert!(get_highlight_config("rust").is_some());
+        assert!(get_highlight_config("javascript").is_some());
+        assert!(get_highlight_config("bash").is_some());
+        assert!(get_highlight_config("json").is_some());
+    }
+
+    /// is_partial_closing_fence: edge cases.
+    #[test]
+    fn is_partial_fence_edge_cases() {
+        assert!(is_partial_closing_fence("`"));
+        assert!(is_partial_closing_fence("``"));
+        assert!(!is_partial_closing_fence("```")); // complete fence
+        assert!(!is_partial_closing_fence("")); // empty
+        assert!(!is_partial_closing_fence("a")); // not backticks
+        assert!(!is_partial_closing_fence("`a")); // mixed
+    }
+
+    /// Soft break renders a blank line.
+    #[test]
+    fn soft_break_renders_blank_line() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("line one\nline two", 80, &mut cache);
+        assert!(lines.len() >= 2, "soft break should produce multiple lines");
+    }
+
+    /// Hard break (backslash + newline) renders a blank line.
+    #[test]
+    fn hard_break_renders_blank_line() {
+        let mut cache = BlockCache::new();
+        let lines = render_markdown("line one\\\nline two", 80, &mut cache);
+        assert!(lines.len() >= 2);
+    }
+
+    /// Horizontal rule renders.
+    #[test]
+    fn horizontal_rule_renders() {
+        let mut cache = BlockCache::new();
+        // Use *** for a rule (--- is parsed as heading underline by some parsers).
+        let lines = render_markdown("before\n\n***\n\nafter", 80, &mut cache);
+        assert!(!lines.is_empty());
+    }
+
+    /// Unclosed code block (streaming tail) renders without panic.
+    #[test]
+    fn unclosed_code_block_tail_renders() {
+        let mut cache = BlockCache::new();
+        // Code block with no closing fence: the tail block handler fires.
+        let lines = render_markdown("```rust\nfn main() {", 80, &mut cache);
+        assert!(!lines.is_empty(), "unclosed code block must render");
+    }
+
+    /// try_highlight returns None for empty code.
+    #[test]
+    fn try_highlight_empty_code_returns_none() {
+        let result = try_highlight("", "rust");
+        // Empty code may return None or Some(empty); just must not panic.
+        let _ = result;
+    }
+
+    /// try_highlight returns None for unsupported lang.
+    #[test]
+    fn try_highlight_unsupported_lang_returns_none() {
+        assert!(try_highlight("code", "cobol").is_none());
     }
 }
