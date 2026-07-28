@@ -51,11 +51,12 @@ Ordered so the riskiest unknown retires first. Each step: write the failing test
 
 ### Step 4 — Grapheme-width engine + corpus
 
-- `GraphemeWidth` trait (ADR 0025). `runefix-core` impl (research.md) [[15]](https://crates.io/crates/runefix-core). Query mode 2027 where available (P13).
-- Projection layer: segment with the width crate's `graphemes()`/`atoms()` [[15]](https://crates.io/crates/runefix-core), compute cluster width, feed pre-widthed spans into ratatui.
-- P13 corpus as snapshot tests: single-codepoint emoji, ZWJ family, VS16, CJK (Hiragana/Katakana/Han), East-Asian-ambiguous, combining marks, halfwidth katakana [[16]](https://mitchellh.com/writing/grapheme-clusters-in-terminals). Assert the cell count the projection assigns. **Cell-diff corruption from width drift is the failure mode the test catches.**
+- `GraphemeWidth` trait (ADR 0025, ADR 0032). `runefix-core` impl (research.md) [[15]](https://crates.io/crates/runefix-core). **Direct cell writing** (ADR 0032): the projection bypasses `set_string` (which uses `unicode-width` and skips zero-width graphemes) and writes cells directly via `buf.get_mut(x, y)` + `set_symbol` + `set_diff_option(CellDiffOption::ForcedWidth(width))`. For width-2 graphemes, the trailing cell at `(x+1, y)` is reset. This is the only way to use runefix-core's grapheme-aware width with ratatui.
+- Wrapping: replace the ASCII-scoped `wrap_text` (char count) with runefix-core's `split_by_width(text, width)` which wraps by display width preserving grapheme boundaries.
+- P13 corpus as snapshot tests: single-codepoint emoji, ZWJ family, VS16, CJK (Hiragana/Katakana/Han), East-Asian-ambiguous, combining marks, halfwidth katakana [[16]](https://mitchellh.com/writing/grapheme-clusters-in-terminals). Each asserts the expected width via `grapheme_widths()` AND asserts the projection writes the correct number of cells (via `TestBackend` buffer inspection). **Cell-diff corruption from width drift is the failure mode the test catches.**
 - Failing test: each corpus class asserts its expected width; a ratatui upgrade that changes cell assignment is caught.
-- **No pi equivalent for the grapheme-aware width engine** (pi uses JS string width; the projection-layer grapheme engine is pi-rs-native, ADR 0025). The P13 corpus itself is pi-rs's regression spec, not a pi port. State explicitly per §9.5.
+- Mode 2027 query deferred to Step 8 (needs real crossterm event stream; Step 4 uses runefix-core's default terminal policy, emoji=2/CJK=2).
+- **Pi equivalent**: pi has a grapheme-aware width engine: `graphemeWidth()` in `packages/tui/src/utils.ts` [L167](https://github.com/earendil-works/pi/blob/083e61621276bff9f6faefab87ce07fcd98734e2/packages/tui/src/utils.ts#L167), using `Intl.Segmenter` (grapheme segmentation) + custom emoji/CJK/zero-width width (emoji=2, CJK=2). pi-rs's `GraphemeWidth` trait + runefix-core impl is the Rust-native equivalent. The P13 corpus is pi-rs's regression spec (pi has no corpus). Cite with line anchors per §9.5.
 
 ### Step 5 — Streaming markdown pipeline
 
