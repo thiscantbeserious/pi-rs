@@ -117,6 +117,12 @@ fn write_line_to_buffer(
 
     for segment in &line.segments {
         for (grapheme, width) in engine.grapheme_widths(&segment.text) {
+            // Skip zero-width graphemes (control chars, lone ZWJ, etc.).
+            // ratatui's set_string does the same. These graphemes are not
+            // rendered and do not advance the cursor.
+            if width == 0 {
+                continue;
+            }
             // Check if the grapheme fits before the viewport edge.
             // A width-2 grapheme at the last column must not be written
             // (its trailing cell would overflow, P13 width-drift corruption).
@@ -126,12 +132,10 @@ fn write_line_to_buffer(
             let cell = buf.cell_mut((x, y)).expect("cell in bounds");
             cell.set_symbol(grapheme);
             cell.set_style(segment.style);
-            if width > 0 {
-                cell.set_diff_option(CellDiffOption::ForcedWidth(
-                    // Safe: width > 0 is guaranteed by the if guard.
-                    std::num::NonZero::new(width).expect("width is non-zero inside if width > 0"),
-                ));
-            }
+            cell.set_diff_option(CellDiffOption::ForcedWidth(
+                // Safe: width > 0 is guaranteed by the skip above.
+                std::num::NonZero::new(width).expect("width is non-zero"),
+            ));
             // Reset trailing cells for width-2 graphemes.
             for offset in 1..width {
                 let trailing_x = x + offset;
@@ -141,7 +145,7 @@ fn write_line_to_buffer(
                         .reset();
                 }
             }
-            x += width.max(1);
+            x += width;
         }
     }
 }
@@ -889,5 +893,93 @@ mod tests {
         let buf = terminal.backend().buffer();
         let cell = buf.cell((0u16, 0u16)).expect("cell exists");
         assert_eq!(cell.symbol(), "❤️", "VS16 must group with base");
+    }
+
+    // === Edge case tests ===
+
+    /// Zero-width graphemes (control chars) are skipped in cell writing.
+    #[test]
+    fn edge_control_char_skipped() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        // Bell (\x07) is width 0 in runefix-core; must be skipped.
+        state.push_message(text_msg("a\u{0007}b"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "a");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "b");
+    }
+
+    /// Tab is expanded to 3 spaces in cell writing.
+    #[test]
+    fn edge_tab_expanded_to_spaces() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg("a\tb"));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "a");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), " ");
+        assert_eq!(buf.cell((2u16, 0u16)).expect("cell").symbol(), " ");
+        assert_eq!(buf.cell((3u16, 0u16)).expect("cell").symbol(), " ");
+        assert_eq!(buf.cell((4u16, 0u16)).expect("cell").symbol(), "b");
+    }
+
+    /// Empty segment produces no cells.
+    #[test]
+    fn edge_empty_segment_no_cells() {
+        let backend = TestBackend::new(10, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        state.push_message(text_msg(""));
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        // No panic = pass. Empty text produces one blank line.
+    }
+
+    /// Multiple content blocks produce separate lines (not concatenated).
+    #[test]
+    fn edge_multiple_blocks_separate_lines() {
+        let backend = TestBackend::new(10, 2);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = RenderState::default();
+        // Two text blocks in one message: "Hi" + "World" (separate blocks).
+        state.push_message(MessageRef::Assistant {
+            content: vec![
+                ContentBlock::Text { text: "Hi".into() },
+                ContentBlock::Text {
+                    text: "World".into(),
+                },
+            ],
+            stop_reason: None,
+            timestamp: 0,
+        });
+        state.render_at_width(10);
+        terminal
+            .draw(|frame| {
+                frame.render_widget(RmmProjection::new(&state), frame.area());
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        // "Hi" on line 0, "World" on line 1 (separate blocks = separate lines).
+        assert_eq!(buf.cell((0u16, 0u16)).expect("cell").symbol(), "H");
+        assert_eq!(buf.cell((1u16, 0u16)).expect("cell").symbol(), "i");
+        assert_eq!(buf.cell((0u16, 1u16)).expect("cell").symbol(), "W");
     }
 }

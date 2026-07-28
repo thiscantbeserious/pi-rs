@@ -11,9 +11,7 @@ name = "pi_render"
 path = "src/lib.rs"
 
 [dependencies]
-ratatui = { workspace = true, features = [
-  "crossterm",
-] }
+ratatui = { workspace = true, features = ["crossterm"] }
 crossterm.workspace = true
 # Opaque payloads for RenderEvent/AssistantMessageEvent until Step 7 (D-E)
 # defines the typed RenderMessage. §9.2 assumption.

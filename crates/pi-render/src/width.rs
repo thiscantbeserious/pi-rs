@@ -31,9 +31,12 @@ pub trait GraphemeWidth: Send {
         if max_width == 0 {
             return Vec::new();
         }
+        // Expand tabs to 3 spaces (pi: utils.ts L232, replaces \t with "   ").
+        // runefix-core returns width 0 for \t; expanding avoids invisible tabs.
+        let expanded = text.replace('\t', "   ");
         let mw = max_width as usize;
         let mut result = Vec::new();
-        for paragraph in text.split('\n') {
+        for paragraph in expanded.split('\n') {
             if paragraph.is_empty() {
                 result.push(String::new());
                 continue;
@@ -294,5 +297,52 @@ mod tests {
     fn wrap_paragraph_empty() {
         let lines = RunefixWidth.wrap_paragraph("", 10);
         assert_eq!(lines.len(), 1);
+    }
+
+    // === Edge case tests ===
+
+    /// Tab is expanded to 3 spaces (pi: utils.ts L232).
+    #[test]
+    fn wrap_expands_tab_to_3_spaces() {
+        let lines = wwrap("a\tb", 10);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "a   b");
+    }
+
+    /// Single grapheme wider than max_width is placed on its own line.
+    #[test]
+    fn wrap_grapheme_wider_than_max_width() {
+        // Emoji (width 2) at max_width 1: placed on its own line (overflow).
+        let lines = wwrap("😀", 1);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "😀");
+    }
+
+    /// Consecutive newlines produce blank lines.
+    #[test]
+    fn wrap_consecutive_newlines() {
+        let lines = wwrap("a\n\nb", 10);
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "a");
+        assert_eq!(lines[1], "");
+        assert_eq!(lines[2], "b");
+    }
+
+    /// Trailing newline produces a trailing blank line.
+    #[test]
+    fn wrap_trailing_newline() {
+        let lines = wwrap("hello\n", 10);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], "hello");
+        assert_eq!(lines[1], "");
+    }
+
+    /// Only newlines produces only blank lines.
+    #[test]
+    fn wrap_only_newlines() {
+        let lines = wwrap("\n\n\n", 10);
+        // split('\n') on "\n\n\n" gives 4 elements: ["", "", "", ""]
+        assert_eq!(lines.len(), 4);
+        assert!(lines.iter().all(|l| l.is_empty()));
     }
 }
