@@ -109,6 +109,7 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 - [ ] Built-in tools Rust-native with pi-parity defaults (ADR 0015)
 - [ ] Extension API wired end-to-end: tools, commands, events, ctx.ui frame buffers and focus routing (ADR 0003), appendEntry routing (ADR 0016)
 - [ ] Slash commands and compaction at daily-work fidelity
+- [ ] pi's test suite ported feature-by-feature against the Oracle (moved from Phase 4: the full agent loop exists at end of Phase 3, so the full suite can be ported now as the safety net for Phase 4)
 - [ ] Dogfood journal (docs/dogfood-journal.md) for fallback events. Evidence comes from agent-session-recorder, which verifiably records the author's agent sessions today [[8]](https://github.com/thiscantbeserious/agent-session-recorder), optionally screenpipe [[7]](https://github.com/mediar-ai/screenpipe) if (re)enabled (local check showed it not running). No new tooling built
 
 **Exit gate 🚦**
@@ -131,7 +132,6 @@ Each exit gate is mirrored as a [GitHub Milestone](https://github.com/thiscantbe
 
 **Deliverables:**
 
-- [ ] pi's test suite ported feature-by-feature against the Oracle
 - [ ] Remaining native API types: `openai-responses`, `google-generative-ai`, `mistral-conversations`, `azure-openai-responses`, `openai-codex-responses`, `bedrock-converse-stream`, `google-vertex`, `pi-messages` — completing all ten `KnownApi` values in the Oracle's provider catalog [[9]](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) (ADR 0019; the four daily drivers land first in Phase 3, the remaining six are Phase 4)
 - [ ] Remaining surface: skills, prompt templates, headless mode (ADR 0018), theme completeness, session branching edge cases
 - [ ] Oracle re-baseline performed deliberately if drift demands it, delta-ported and recorded
