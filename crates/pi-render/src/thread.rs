@@ -245,8 +245,17 @@ mod tests {
         let sink = CountingSink::new(observed.clone());
         let (handle, thread) = RenderThread::spawn(NullInput, sink, 64).unwrap();
 
-        // Send a render event (sync, non-blocking).
-        handle.send(text_delta_event(0, "hi")).unwrap();
+        // Send MessageStart then TextDelta (streaming lifecycle).
+        let h = handle.clone();
+        h.send(RenderEvent::MessageStart {
+            message: MessageRef::Assistant {
+                content: vec![crate::message::ContentBlock::Text { text: "".into() }],
+                stop_reason: None,
+                timestamp: 0,
+            },
+        })
+        .unwrap();
+        h.send(text_delta_event(0, "hi")).unwrap();
 
         // Wait for a frame to draw after the apply (<=16ms cadence per frame).
         let mut waited_ms = 0;

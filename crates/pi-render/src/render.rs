@@ -111,7 +111,7 @@ impl CountingSink {
 
 impl FrameSink for CountingSink {
     fn draw(&mut self, state: &RenderState) -> io::Result<()> {
-        if state.applied > 0 {
+        if !state.messages().is_empty() {
             self.observed.store(true, Ordering::SeqCst);
         }
         Ok(())
