@@ -8,6 +8,7 @@
 
 pub mod event;
 pub mod input;
+pub mod markdown;
 pub mod message;
 pub mod projection;
 pub mod render;
