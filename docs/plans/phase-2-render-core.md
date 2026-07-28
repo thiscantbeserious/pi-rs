@@ -70,10 +70,12 @@ Ordered so the riskiest unknown retires first. Each step: write the failing test
 
 ### Step 6 — Theme loader
 
-- Typed `Theme` struct (D-F). Read `~/.pi/agent/themes/*.json` (ADR 0020). `vars` resolved at render time. Capture→palette `match` (D-F). Tolerant of unknown keys, never destructively rewritten (ADR 0020).
+- Typed `Theme` struct (D-F, ADR 0034) with `ColorValue` enum (Hex, Indexed, Reset). Vars resolved at load time with cycle detection (like pi's resolveThemeColors, theme.ts L310-L322). Read `~/.pi/agent/themes/*.json` (ADR 0020). Unknown keys tolerated (skipped, ADR 0020). Missing required keys default to Reset. `ColorValue` maps to `ratatui::style::Color` (Hex->Rgb, Indexed->Indexed, Reset->Reset).
+- Capture-to-palette `match` (ADR 0012, ADR 0034): tree-sitter captures -> pi's 9 `syntax*` keys. Replaces Step 5's hardcoded `capture_to_style`. The mapping is a single `match` expression (ADR 0012: 'single place to tune').
 - Live theme switch: `RenderEvent::ThemeChanged` flushes the block cache (ADR 0010) and re-projects.
-- Failing test: assert a theme loads and resolves vars; assert live switch restyles the RMM without a full re-parse; assert unknown keys are tolerated.
-- **Pi equivalent**: pi's `theme-schema.json` (the 9 `syntax*` keys at L74-82) [[20]](https://github.com/earendil-works/pi/blob/v0.82.0/packages/coding-agent/src/modes/interactive/theme/theme-schema.json), cited in research.md. pi-rs loads themes unchanged (ADR 0012).
+- Failing test: assert a theme loads and resolves vars; assert live switch restyles the RMM without a full re-parse; assert unknown keys are tolerated; assert missing keys default to Reset.
+- **Snapshot testing** (ADR 0034): three layers using insta. (1) Resolved Theme struct per theme file (catches var resolution regressions). (2) Rendered TestBackend buffer per theme with sample markdown + code highlighting (catches capture-to-palette visual regressions). (3) Capture mapping output per tree-sitter capture name (catches mapping table regressions). Direct pi vs pi-rs cross-compare rejected (ANSI vs Color enum, different representations).
+- **Pi equivalent**: pi's `theme-schema.json` (the 9 `syntax*` keys, ~50 total color keys) [[20]](https://github.com/earendil-works/pi/blob/v0.82.0/packages/coding-agent/src/modes/interactive/theme/theme-schema.json), `resolveVarRefs` (theme.ts L293-L318), `resolveThemeColors` (theme.ts L310-L322). pi-rs loads themes unchanged (ADR 0012). Vars resolved at load (ADR 0034 corrects research.md D-F: 'resolved at render time' -> 'resolved at load time').
 
 ### Step 7 — Replay wiring + 20MB gate
 

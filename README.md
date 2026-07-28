@@ -128,6 +128,7 @@ flowchart TB
 - [ADR 0031](./docs/adr/0031-rmm-viewport-model.md): RMM viewport model: visible-window rendering with message-granular line cache
 - [ADR 0032](./docs/adr/0032-grapheme-width-direct-cell-writing.md): Grapheme-width engine implementation: direct cell writing with ForcedWidth
 - [ADR 0033](./docs/adr/0033-markdown-pipeline-implementation.md): Markdown pipeline implementation: block-granular cache, partial fences, grammar set
+- [ADR 0034](./docs/adr/0034-theme-loader-implementation.md): Theme loader implementation: typed struct, var resolution at load, ratatui Color mapping, snapshot testing
 
 ## Platform support (v1)
 
