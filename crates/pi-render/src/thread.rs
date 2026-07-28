@@ -245,8 +245,17 @@ mod tests {
         let sink = CountingSink::new(observed.clone());
         let (handle, thread) = RenderThread::spawn(NullInput, sink, 64).unwrap();
 
-        // Send a render event (sync, non-blocking).
-        handle.send(text_delta_event(0, "hi")).unwrap();
+        // Send MessageStart then TextDelta (streaming lifecycle).
+        let h = handle.clone();
+        h.send(RenderEvent::MessageStart {
+            message: MessageRef::Assistant {
+                content: vec![crate::message::ContentBlock::Text { text: "".into() }],
+                stop_reason: None,
+                timestamp: 0,
+            },
+        })
+        .unwrap();
+        h.send(text_delta_event(0, "hi")).unwrap();
 
         // Wait for a frame to draw after the apply (<=16ms cadence per frame).
         let mut waited_ms = 0;
@@ -311,5 +320,69 @@ mod tests {
         let _clone = handle.clone();
         handle.quit();
         thread.join().unwrap();
+    }
+
+    /// send() returns a full error when the channel is at capacity (backpressure).
+    #[test]
+    fn send_returns_error_when_full() {
+        // Construct a RenderHandle without a worker so nothing drains the
+        // channel. This makes the backpressure test deterministic.
+        let (tx, _rx) = mpsc::sync_channel::<LoopEvent>(1);
+        let handle = RenderHandle {
+            tx,
+            quit_flag: Arc::new(AtomicBool::new(false)),
+        };
+        // Fill the channel (capacity 1).
+        handle.send(text_delta_event(0, "x")).unwrap();
+        // Next send must fail (full).
+        let err = handle.send(text_delta_event(0, "y")).unwrap_err();
+        assert!(
+            err.full,
+            "send on a full channel must return SendError with full=true"
+        );
+    }
+
+    /// RenderHandle is Clone + Debug.
+    #[test]
+    fn render_handle_clone_and_debug() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let (handle, thread) =
+            RenderThread::spawn(NullInput, CountingSink::new(observed), 16).unwrap();
+        let cloned = handle.clone();
+        let _debug = format!("{:?}", cloned);
+        handle.quit();
+        thread.join().unwrap();
+    }
+
+    /// RenderThread is Debug.
+    #[test]
+    fn render_thread_is_debug() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let (handle, thread) =
+            RenderThread::spawn(NullInput, CountingSink::new(observed), 16).unwrap();
+        let _debug = format!("{:?}", thread);
+        handle.quit();
+        thread.join().unwrap();
+    }
+
+    /// SendError from converts Full and Disconnected correctly.
+    #[test]
+    fn send_error_from_full_and_disconnected() {
+        let (tx, _rx) = mpsc::sync_channel::<LoopEvent>(1);
+        tx.send(LoopEvent::Render(RenderEvent::Quit)).unwrap(); // fill
+        let full_err = tx
+            .try_send(LoopEvent::Render(RenderEvent::Quit))
+            .unwrap_err();
+        let se: SendError = full_err.into();
+        assert!(se.full);
+
+        let (tx2, rx2) = mpsc::sync_channel::<LoopEvent>(1);
+        drop(rx2);
+        // Use try_send to get TrySendError::Disconnected.
+        let disc_err = tx2
+            .try_send(LoopEvent::Render(RenderEvent::Quit))
+            .unwrap_err();
+        let se2: SendError = disc_err.into();
+        assert!(!se2.full);
     }
 }

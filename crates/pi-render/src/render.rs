@@ -111,7 +111,7 @@ impl CountingSink {
 
 impl FrameSink for CountingSink {
     fn draw(&mut self, state: &RenderState) -> io::Result<()> {
-        if state.applied > 0 {
+        if !state.messages().is_empty() {
             self.observed.store(true, Ordering::SeqCst);
         }
         Ok(())
@@ -146,5 +146,106 @@ mod tests {
         tx.send(LoopEvent::Render(RenderEvent::Quit)).unwrap();
         let drained = drain_events(&rx);
         assert_eq!(drained.len(), 3, "drain must collect all pending events");
+    }
+
+    /// CountingSink sets observed when state has messages.
+    #[test]
+    fn counting_sink_observes_messages() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let mut sink = CountingSink::new(observed.clone());
+        let mut state = RenderState::default();
+        state.push_message(crate::message::MessageRef::Assistant {
+            content: vec![],
+            stop_reason: None,
+            timestamp: 0,
+        });
+        sink.draw(&state).unwrap();
+        assert!(observed.load(Ordering::SeqCst));
+    }
+
+    /// CountingSink does not set observed when state is empty.
+    #[test]
+    fn counting_sink_empty_state_not_observed() {
+        let observed = Arc::new(AtomicBool::new(false));
+        let mut sink = CountingSink::new(observed.clone());
+        let state = RenderState::default();
+        sink.draw(&state).unwrap();
+        assert!(!observed.load(Ordering::SeqCst));
+    }
+
+    /// run_loop exits on Quit event through the channel.
+    #[test]
+    fn run_loop_exits_on_quit_event() {
+        let (tx, rx) = mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let observed = Arc::new(AtomicBool::new(false));
+        let sink = CountingSink::new(observed);
+        tx.send(LoopEvent::Render(RenderEvent::Quit)).unwrap();
+        // run_loop should exit after processing the Quit.
+        run_loop(sink, rx, quit_flag);
+    }
+
+    /// run_loop exits when channel disconnects.
+    #[test]
+    fn run_loop_exits_on_disconnect() {
+        let (tx, rx) = mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let observed = Arc::new(AtomicBool::new(false));
+        let sink = CountingSink::new(observed);
+        drop(tx); // disconnect
+        run_loop(sink, rx, quit_flag);
+    }
+
+    /// run_loop draws when dirty (applies events then draws).
+    #[test]
+    fn run_loop_draws_when_dirty() {
+        use crate::message::{ContentBlock, MessageRef};
+        let (tx, rx) = mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let observed = Arc::new(AtomicBool::new(false));
+        let sink = CountingSink::new(observed.clone());
+        // Send a MessageStart (makes state dirty), then Quit.
+        tx.send(LoopEvent::Render(RenderEvent::MessageStart {
+            message: MessageRef::Assistant {
+                content: vec![ContentBlock::Text { text: "hi".into() }],
+                stop_reason: None,
+                timestamp: 0,
+            },
+        }))
+        .unwrap();
+        tx.send(LoopEvent::Render(RenderEvent::Quit)).unwrap();
+        run_loop(sink, rx, quit_flag);
+        assert!(
+            observed.load(Ordering::SeqCst),
+            "sink must draw after dirty apply"
+        );
+    }
+
+    /// run_loop handles InputEvent::Quit (from the reader thread).
+    #[test]
+    fn run_loop_exits_on_input_quit() {
+        let (tx, rx) = mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let observed = Arc::new(AtomicBool::new(false));
+        let sink = CountingSink::new(observed);
+        tx.send(LoopEvent::Input(crate::input::InputEvent::Quit))
+            .unwrap();
+        run_loop(sink, rx, quit_flag);
+    }
+
+    /// run_loop times out and continues (no events for one frame).
+    #[test]
+    fn run_loop_handles_timeout() {
+        let (tx, rx) = mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let observed = Arc::new(AtomicBool::new(false));
+        let sink = CountingSink::new(observed);
+        let qf = quit_flag.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
+            let _ = tx.send(LoopEvent::Render(RenderEvent::Quit));
+            qf.store(true, Ordering::Release);
+        });
+        run_loop(sink, rx, quit_flag);
     }
 }

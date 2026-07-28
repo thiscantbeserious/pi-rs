@@ -9,6 +9,7 @@
 pub mod event;
 pub mod input;
 pub mod message;
+pub mod projection;
 pub mod render;
 pub mod state;
 pub mod stream;

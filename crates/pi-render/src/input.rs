@@ -60,7 +60,12 @@ pub(crate) fn reader_loop<I: InputSource>(
                 }
             }
             Ok(None) => {}
-            Err(_) => {} // flaky input read; continue
+            Err(_) => {
+                // Fail closed (ADR 0009): an input read error stops the
+                // reader thread. The render thread still runs (it may have
+                // events to process), but no new input arrives until restart.
+                break;
+            }
         }
     }
 }
@@ -89,5 +94,67 @@ mod tests {
         let res = input.poll(Duration::from_millis(10)).unwrap();
         assert!(start.elapsed() >= Duration::from_millis(8));
         assert_eq!(res, None);
+    }
+
+    /// reader_loop exits when quit_flag is set.
+    #[test]
+    fn reader_loop_exits_on_quit_flag() {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(true));
+        reader_loop(NullInput, tx, quit_flag);
+        // Returns immediately because quit_flag is already set.
+    }
+
+    /// reader_loop fails closed on input error (ADR 0009): stops the reader.
+    #[test]
+    fn reader_loop_fails_closed_on_input_error() {
+        struct ErrorInput;
+        impl InputSource for ErrorInput {
+            fn poll(&mut self, _timeout: Duration) -> io::Result<Option<InputEvent>> {
+                Err(io::Error::other("flaky"))
+            }
+        }
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        // ErrorInput returns Err on first poll; reader_loop breaks (fail closed).
+        reader_loop(ErrorInput, tx, quit_flag);
+        // No panic = pass. The reader stopped on error.
+    }
+
+    /// reader_loop sends InputEvent::Quit through the channel.
+    #[test]
+    fn reader_loop_sends_input() {
+        struct QuitInput(Arc<AtomicBool>);
+        impl InputSource for QuitInput {
+            fn poll(&mut self, _timeout: Duration) -> io::Result<Option<InputEvent>> {
+                self.0.store(true, Ordering::Release);
+                Ok(Some(InputEvent::Quit))
+            }
+        }
+        let (tx, rx) = std::sync::mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        let qf = quit_flag.clone();
+        let handle = thread::spawn(move || reader_loop(QuitInput(qf), tx, quit_flag));
+        // Receive the InputEvent::Quit.
+        let ev = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(matches!(ev, LoopEvent::Input(InputEvent::Quit)));
+        // The QuitInput sets quit_flag on first poll, so the loop exits.
+        handle.join().unwrap();
+    }
+
+    /// reader_loop exits when channel is closed (send fails).
+    #[test]
+    fn reader_loop_exits_on_channel_closed() {
+        struct AlwaysInput;
+        impl InputSource for AlwaysInput {
+            fn poll(&mut self, _timeout: Duration) -> io::Result<Option<InputEvent>> {
+                Ok(Some(InputEvent::Quit))
+            }
+        }
+        let (tx, rx) = std::sync::mpsc::sync_channel::<LoopEvent>(16);
+        let quit_flag = Arc::new(AtomicBool::new(false));
+        drop(rx); // close the channel
+        reader_loop(AlwaysInput, tx, quit_flag);
+        // Returns because send fails (channel closed).
     }
 }
