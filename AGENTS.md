@@ -54,7 +54,7 @@ Every change follows one loop: understand, design, implement, land.
 - `cargo test --workspace`
 - `cargo insta test --check --workspace`
 - `./tests/e2e_test.sh`
-- 70% coverage (tarpaulin), ASan on main + `ready-to-merge`, SonarCloud zero new issues
+- 90% coverage (tarpaulin), ASan on main + `ready-to-merge`, SonarCloud zero new issues
 
 ## Layout (ADR 0011, ADR 0021)
 
