@@ -3,11 +3,13 @@
 
 [default]
 # Fail if coverage drops below threshold
-fail-under = 70.0
+fail-under = 90.0
 
-# Exclusions mirror agent-session-recorder's policy, adapted to the workspace:
+# Exclusions:
 # - crates/*/tests/*: integration test files themselves
 # - */tests.rs: inline test modules
 # - crates/*/src/main.rs: CLI entry point, tested via e2e
-# TUI/terminal-bound modules will be added here as they appear (tested via e2e/snapshot).
+# TUI/terminal-bound modules are NOT excluded. They use injectable
+# overrides (e.g. SyncBackend size_override, MockEventReader) so all
+# paths are testable without a real TTY.
 exclude-files = ["crates/*/tests/*", "*/tests.rs", "crates/*/src/main.rs"]
