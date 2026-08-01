@@ -15,6 +15,7 @@ pub mod render;
 pub mod state;
 pub mod stream;
 pub mod suspend;
+pub mod sync_backend;
 pub mod terminal;
 pub mod thread;
 pub mod width;
